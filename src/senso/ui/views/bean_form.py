@@ -10,6 +10,7 @@ from senso.db.bean_repo import BeanRepository
 from senso.domain.bean import (
     LABELS,
     NAME_MAX,
+    ORIGIN_MAX,
     PRODUCER_MAX,
     ROAST_LEVELS,
     TEA_TYPES,
@@ -18,6 +19,7 @@ from senso.domain.bean import (
     BeanValidationError,
     validate_bean,
 )
+from senso.origin import country_of
 from senso.photos import PhotoError, delete_photo, load_photo, save_photo
 from senso.text import josa, quote
 from senso.ui import theme
@@ -107,6 +109,22 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
         max_length=NAME_MAX,
         autofocus=not editing,
     )
+    origin = ft.TextField(
+        label="산지 (나라·지역)",
+        hint_text="예) 에티오피아, 콜롬비아" if kind is BeanKind.COFFEE else "예) 제주, 다즐링",
+        value=(bean.origin or "") if bean else "",
+        max_length=ORIGIN_MAX,
+    )
+    flag_hint = ft.Text(size=theme.CAPTION_SIZE, color=theme.TEXT_MUTED)
+
+    def render_flag() -> None:
+        country = country_of(origin.value, name.value)
+        if country:
+            flag_hint.value = f"{country.flag} {country.name} 국기가 함께 표시돼요"
+        else:
+            flag_hint.value = "산지를 적으면 그 나라 국기가 함께 표시돼요"
+
+    render_flag()
     producer = ft.TextField(
         label=labels.producer,
         value=(bean.producer or "") if bean else "",
@@ -135,7 +153,7 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
         )
         choice_field = "tea_type"
 
-    fields = {"name": name, "producer": producer, "produced_on": produced_on}
+    fields = {"name": name, "origin": origin, "producer": producer, "produced_on": produced_on}
 
     def clear_error(e: ft.Event) -> None:
         """고치기 시작하면 그 칸의 오류 문구를 지운다."""
@@ -145,6 +163,14 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
 
     for field in fields.values():
         field.on_change = clear_error
+
+    def on_place_change(e: ft.Event) -> None:
+        clear_error(e)
+        render_flag()
+        flag_hint.update()
+
+    name.on_change = on_place_change
+    origin.on_change = on_place_change
 
     def show_errors(errors: dict[str, str]) -> None:
         for key, field in fields.items():
@@ -161,6 +187,7 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
                 produced_on.value,
                 roast_level=choice.value if kind is BeanKind.COFFEE else None,
                 tea_type=choice.value if kind is BeanKind.TEA else None,
+                origin=origin.value,
             )
         except BeanValidationError as e:
             show_errors(e.errors)
@@ -223,6 +250,8 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
             ),
             name,
             ft.Text("상세 정보 (선택)", size=theme.CAPTION_SIZE, color=theme.TEXT_MUTED),
+            origin,
+            flag_hint,
             producer,
             produced_on,
             ft.Row([choice]),

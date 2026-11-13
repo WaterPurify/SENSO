@@ -7,6 +7,7 @@ import flet as ft
 
 from senso.domain.bean import BeanKind
 from senso.domain.brew import Brew
+from senso.origin import with_flag
 from senso.ui import theme
 
 WEEKDAYS = "월화수목금토일"
@@ -75,7 +76,7 @@ def brew_card(brew: Brew, on_open: Callable[[Brew], None]) -> ft.Control:
                         expand=True,
                         controls=[
                             ft.Text(
-                                brew.bean.name,
+                                with_flag(brew.bean.name, brew.bean.origin),
                                 size=theme.BODY_SIZE + 1,
                                 weight=ft.FontWeight.BOLD,
                                 color=theme.BROWN,

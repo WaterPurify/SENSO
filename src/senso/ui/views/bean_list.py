@@ -5,6 +5,7 @@ from collections.abc import Callable
 import flet as ft
 
 from senso.domain.bean import LABELS, ROAST_LEVELS, TEA_TYPES, Bean, BeanKind
+from senso.origin import with_flag
 from senso.text import josa
 from senso.ui import theme
 from senso.ui.components.empty_state import empty_state
@@ -38,8 +39,10 @@ def _thumbnail(kind: BeanKind, photo: bytes | None) -> ft.Control:
 
 
 def describe(bean: Bean) -> str:
-    """카드 두 번째 줄: 로스터리 · 로스팅 정도 · 날짜."""
+    """카드 두 번째 줄: 산지 · 로스터리 · 로스팅 정도 · 날짜."""
     parts: list[str] = []
+    if bean.origin:
+        parts.append(bean.origin)
     if bean.producer:
         parts.append(bean.producer)
     if bean.kind is BeanKind.COFFEE and bean.roast_level and bean.roast_level != "unknown":
@@ -70,7 +73,7 @@ def bean_card(bean: Bean, photo: bytes | None, on_open: Callable[[Bean], None]) 
                         expand=True,
                         controls=[
                             ft.Text(
-                                bean.name,
+                                with_flag(bean.name, bean.origin),
                                 size=theme.BODY_SIZE + 1,
                                 weight=ft.FontWeight.BOLD,
                                 color=theme.BROWN,

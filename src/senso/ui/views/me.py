@@ -146,6 +146,7 @@ def me_view(
     dna: TasteDNA | NotEnough,
     on_quiz: Callable[[], None],
     on_open: Callable[[Brew], None],
+    word_section: ft.Control | None = None,
 ) -> ft.Control:
     return ft.Column(
         spacing=theme.SPACING,
@@ -154,6 +155,7 @@ def me_view(
             header("나의 취향", "취향 유형과 Taste DNA"),
             _quiz_section(quiz, on_quiz),
             *_dna_section(dna, on_open),
+            *([word_section] if word_section else []),
             ft.Text(
                 f"버전 {__version__} · 데이터 스키마 v{schema_version}",
                 size=theme.CAPTION_SIZE,

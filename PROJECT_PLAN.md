@@ -15,6 +15,7 @@
 | W5 규칙 기반 추천 | ✅ 완료 | 추천 테스트 33개 |
 | W6 추천→새 기록 + Sen & So | ✅ 완료 | 캐릭터 그림은 발표 자료에서 가져옴 |
 | W7 취향 테스트 + Taste DNA | ✅ 완료 | 글꼴을 앱 안(assets/fonts)에 넣음. 카드 '저장' 버튼은 직접 눌러 보지 못함 |
+| v2.5 반영 (추가) | ✅ 완료 | 산지 국기 표시, 오늘의 말씀 한 잔. 말씀 본문 원문 대조·묵상 문장 목회자 검수는 출시 전에 필요 |
 | W8 안정화·APK | ⏳ 예정 | |
 
 ---
@@ -90,7 +91,7 @@ SENSO/app/
 ```
 
 ### 데이터 모델(핵심)
-- **beans**: id, kind(coffee/tea), name, producer(로스터리 / 브랜드·찻집), produced_on(로스팅 날짜 / 제조일), roast_level(커피), tea_type(차), photo_path, deleted_at  ← 스키마 v2
+- **beans**: id, kind(coffee/tea), name, producer(로스터리 / 브랜드·찻집), produced_on(로스팅 날짜 / 제조일), roast_level(커피), tea_type(차), origin(산지), photo_path, deleted_at  ← 스키마 v2, origin은 v4
 - **brews**: id, bean_id, **bean_snapshot(JSON)**, brewed_at, desired_flavors, hot_or_iced, equipment(JSON), dose_g, water_g, temp_c, grind(문자열), time_s, ice_g, notes, acidity/bitterness/sweetness/body(NULL = 미입력), satisfaction, next_wish, based_on_brew_id, based_on_rec_id, is_sample
 - **recommendations**: id, source_brew_id, changed_field, from_value, to_value_or_direction, reason, method('rule-v1')
 - **quiz_results**: id, taken_at, answers(JSON), type_code
@@ -152,3 +153,22 @@ SENSO/app/
 
 ## 6. 8주 이후(사업계획서 W9–W16)
 베타 100명 배포 → 테이스팅 박스 파일럿 → 계정·서버 도입(FastAPI 또는 Supabase) → Plus 결제 → AI Brew Coach(추천 엔진 교체) → Mac 환경에서 iOS 빌드.
+
+## v2.5 반영: 산지 국기와 오늘의 말씀 한 잔
+
+사업계획서 v2.5에서 늘어난 "오늘의 말씀 한 잔"(3-4절)과, 원두·차 산지 국기 표시를 넣었다. 스키마 v4.
+
+- **산지 국기**: 원두·차에 `origin`(산지) 칸을 추가했다. `senso/origin.py`가 산지 칸을 먼저 보고, 비어 있으면 이름에서 나라를 찾는다. 국기는 이모지로 그린다. 예: 에티오피아 예가체프 → 🇪🇹, 제주 세작 → 🇰🇷
+- **말씀 한 잔**: 원하는 사람만 켜는 기능이다. 처음 한 번은 홈에서 켤지 묻고, '나' 탭에서 언제든 바꿀 수 있다.
+  - 하루에 한 장만 받는다 (`word_cards.day` UNIQUE).
+  - 기분 8가지 중 하나를 고르면 어울리는 한 잔, 개역한글 말씀 한 구절, 묵상 한 줄을 보여 준다.
+  - 말씀 노트에 저장할 수 있고, 카드를 PNG(1080×1920)로 저장할 수 있다.
+  - 사용자가 적은 한 줄에 위기 신호가 있으면 109 등 상담 안내를 먼저 보여 준다. "신앙이 궁금하다면" 소개 페이지도 넣었다.
+- **출시 전에 할 일**: 이 내용은 `senso/word/moods.py` 맨 위에도 적어 두었다.
+  - 말씀 본문을 개역한글 원문과 대조한다.
+  - 묵상 문장을 목회자에게 검수받는다.
+  - 기분별 구절을 30~50개로 늘린다.
+- **아직 없는 것**:
+  - 하루 1회 알림 시간 설정. 푸시 알림이 필요하다.
+  - 본문 전체 읽기
+  - 카카오톡·인스타그램 바로 공유. 지금은 이미지 저장만 된다.

@@ -8,7 +8,9 @@ from datetime import date
 
 from senso.domain.bean import Bean, BeanDraft, BeanKind
 
-_COLUMNS = "id, kind, name, producer, produced_on, roast_level, tea_type, photo_path, is_sample"
+_COLUMNS = (
+    "id, kind, name, producer, produced_on, roast_level, tea_type, origin, photo_path, is_sample"
+)
 
 
 def _to_bean(row: sqlite3.Row) -> Bean:
@@ -20,6 +22,7 @@ def _to_bean(row: sqlite3.Row) -> Bean:
         produced_on=date.fromisoformat(row["produced_on"]) if row["produced_on"] else None,
         roast_level=row["roast_level"],
         tea_type=row["tea_type"],
+        origin=row["origin"],
         photo_path=row["photo_path"],
         is_sample=bool(row["is_sample"]),
     )
@@ -32,6 +35,7 @@ def _values(draft: BeanDraft) -> tuple:
         draft.produced_on.isoformat() if draft.produced_on else None,
         draft.roast_level,
         draft.tea_type,
+        draft.origin,
     )
 
 
@@ -65,7 +69,7 @@ class BeanRepository:
         with self.conn:
             cur = self.conn.execute(
                 "INSERT INTO beans (kind, name, producer, produced_on, roast_level, tea_type, "
-                "photo_path, is_sample) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "origin, photo_path, is_sample) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (draft.kind.value, *_values(draft), photo_path, int(is_sample)),
             )
         bean = self.get(cur.lastrowid)
@@ -77,7 +81,7 @@ class BeanRepository:
         with self.conn:
             cur = self.conn.execute(
                 "UPDATE beans SET name = ?, producer = ?, produced_on = ?, roast_level = ?, "
-                "tea_type = ?, photo_path = ?, updated_at = datetime('now') "
+                "tea_type = ?, origin = ?, photo_path = ?, updated_at = datetime('now') "
                 "WHERE id = ? AND deleted_at IS NULL",
                 (*_values(draft), photo_path, bean_id),
             )

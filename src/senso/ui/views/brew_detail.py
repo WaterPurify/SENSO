@@ -8,6 +8,7 @@ import flet as ft
 from senso.db.brew_repo import BrewRepository
 from senso.domain.bean import LABELS, ROAST_LEVELS, TEA_TYPES, BeanKind
 from senso.domain.brew import NEXT_WISHES, SCORE_FIELDS, Brew, format_number, format_time
+from senso.origin import with_flag
 from senso.ui import theme
 from senso.ui.components.brew_card import format_when, satisfaction_tag, tag
 from senso.ui.components.inputs import section
@@ -223,7 +224,7 @@ def brew_detail_view(brew: Brew, deps: DetailDeps) -> ft.Control:
                         expand=True,
                         controls=[
                             ft.Text(
-                                brew.bean.name,
+                                with_flag(brew.bean.name, brew.bean.origin),
                                 size=theme.HEADING_SIZE,
                                 weight=ft.FontWeight.BOLD,
                                 color=theme.BROWN,

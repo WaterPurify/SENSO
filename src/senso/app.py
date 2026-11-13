@@ -16,6 +16,8 @@ from senso.db.brew_repo import BrewRepository
 from senso.db.database import open_database, schema_version
 from senso.db.quiz_repo import QuizRepository
 from senso.db.recommendation_repo import RecommendationRepository
+from senso.db.settings_repo import WORD_ENABLED, SettingsRepository
+from senso.db.word_repo import AlreadyToday, WordCard, WordRepository
 from senso.domain.bean import Bean, BeanKind
 from senso.domain.brew import Brew, BrewDraft
 from senso.photos import load_photo
@@ -37,6 +39,17 @@ from senso.ui.views.home import home_view
 from senso.ui.views.me import me_view
 from senso.ui.views.quiz_view import QuizDeps, quiz_view
 from senso.ui.views.recommend_view import RecommendDeps, recommend_view
+from senso.ui.views.word_view import (
+    CardDeps,
+    PickDeps,
+    faith_view,
+    word_card_view,
+    word_home,
+    word_intro,
+    word_me_section,
+    word_pick_view,
+)
+from senso.word.moods import MOODS_BY_KEY, find_verse, pick_verse
 
 TABS = [
     (ft.Icons.HOME_OUTLINED, ft.Icons.HOME, "기록"),
@@ -64,6 +77,8 @@ def main(page: ft.Page) -> None:
     brews = BrewRepository(conn)
     recommendations = RecommendationRepository(conn)
     quizzes = QuizRepository(conn)
+    settings = SettingsRepository(conn)
+    words = WordRepository(conn)
     photo_dir = config.photos_dir()
 
     picker = ft.FilePicker()  # 페이지에 서비스로 등록된다
@@ -293,10 +308,80 @@ def main(page: ft.Page) -> None:
             really,
         )
 
+    # ---- 오늘의 말씀 한 잔 ------------------------------------------------
+    def set_word_enabled(on: bool, back_tab: int) -> None:
+        settings.set_flag(WORD_ENABLED, on)
+        if on:
+            notify("오늘의 말씀 한 잔을 켰어요.")
+        else:
+            notify("말씀 한 잔은 꺼 둘게요. '나' 탭에서 언제든 켤 수 있어요.")
+        open_tab(back_tab)
+
+    def word_top() -> list[ft.Control]:
+        enabled = settings.get_flag(WORD_ENABLED)
+        if enabled is None:
+            return [
+                word_intro(
+                    on_enable=lambda: set_word_enabled(True, TAB_HOME),
+                    on_decline=lambda: set_word_enabled(False, TAB_HOME),
+                )
+            ]
+        if not enabled:
+            return []
+        today = words.for_day(config.now().date())
+        return [word_home(today, on_pick=open_word_pick, on_open=lambda c: open_word_card(c))]
+
+    def open_word_pick() -> None:
+        today = words.for_day(config.now().date())
+        if today is not None:  # 하루 한 장
+            open_word_card(today)
+            return
+
+        def picked(mood_key: str, note: str | None) -> None:
+            now = config.now()
+            mood = MOODS_BY_KEY[mood_key]
+            verse = pick_verse(mood, now.date())
+            try:
+                card = words.create(now.date(), mood_key, verse.ref, note, now)
+            except AlreadyToday:
+                card = words.for_day(now.date())
+                assert card is not None
+            open_word_card(card)
+
+        nav.selected_index = TAB_HOME
+        show(word_pick_view(PickDeps(on_back=lambda: open_tab(TAB_HOME), on_pick=picked)))
+
+    def open_word_card(card: WordCard, back_tab: int = TAB_HOME) -> None:
+        found = find_verse(card.mood, card.verse_ref)
+        if found is None:
+            notify("이 말씀 카드를 열 수 없어요.")
+            open_tab(back_tab)
+            return
+        mood, verse = found
+        nav.selected_index = back_tab
+        show(
+            word_card_view(
+                card,
+                mood,
+                verse,
+                CardDeps(
+                    on_back=lambda: open_tab(back_tab),
+                    set_saved=words.set_saved,
+                    save_png=save_png,
+                    on_faith=lambda: open_faith(lambda: open_word_card(card, back_tab)),
+                    notify=notify,
+                ),
+            )
+        )
+
+    def open_faith(back: Callable[[], None]) -> None:
+        show(faith_view(back))
+
     def build_tab(index: int) -> ft.Control:
         if index == TAB_HOME:
             all_brews = brews.list()
             top: list[ft.Control] = [speech_bubble(home_greeting(config.now(), len(all_brews)))]
+            top += word_top()
             bottom: list[ft.Control] = []
             if not all_brews:
                 bottom.append(
@@ -339,6 +424,13 @@ def main(page: ft.Page) -> None:
             compute_dna(brews.list()),
             on_quiz=open_quiz,
             on_open=lambda b: open_brew_detail(b.id),
+            word_section=word_me_section(
+                enabled=bool(settings.get_flag(WORD_ENABLED)),
+                notes=words.saved(),
+                on_toggle=lambda on: set_word_enabled(on, TAB_ME),
+                on_open=lambda c: open_word_card(c, TAB_ME),
+                on_faith=lambda: open_faith(lambda: open_tab(TAB_ME)),
+            ),
         )
 
     def open_quiz() -> None:

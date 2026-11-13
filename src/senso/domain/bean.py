@@ -34,6 +34,7 @@ TEA_TYPES: dict[str, str] = {
 
 NAME_MAX = 60
 PRODUCER_MAX = 60
+ORIGIN_MAX = 40
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,7 @@ class BeanDraft:
     produced_on: date | None = None
     roast_level: str | None = None  # 커피만
     tea_type: str | None = None  # 차만
+    origin: str | None = None  # 산지 (나라·지역)
 
 
 @dataclass(frozen=True)
@@ -107,6 +109,7 @@ def validate_bean(
     roast_level: str | None = None,
     tea_type: str | None = None,
     today: date | None = None,
+    origin: str | None = None,
 ) -> BeanDraft:
     """폼 입력을 검사한다. 문제가 있으면 항목별 메시지를 담은 BeanValidationError."""
     today = today or date.today()
@@ -122,6 +125,10 @@ def validate_bean(
     clean_producer = _blank_to_none(producer)
     if clean_producer and len(clean_producer) > PRODUCER_MAX:
         errors["producer"] = f"{PRODUCER_MAX}자 이내로 입력해 주세요"
+
+    clean_origin = _blank_to_none(origin)
+    if clean_origin and len(clean_origin) > ORIGIN_MAX:
+        errors["origin"] = f"{ORIGIN_MAX}자 이내로 입력해 주세요"
 
     parsed_date: date | None = None
     if _blank_to_none(produced_on):
@@ -154,4 +161,5 @@ def validate_bean(
         produced_on=parsed_date,
         roast_level=level,
         tea_type=ttype,
+        origin=clean_origin,
     )

@@ -107,6 +107,7 @@ class BeanSnapshot:
     roast_level: str | None = None
     tea_type: str | None = None
     produced_on: str | None = None
+    origin: str | None = None
 
     @classmethod
     def of(cls, bean: Bean) -> "BeanSnapshot":
@@ -117,6 +118,7 @@ class BeanSnapshot:
             roast_level=bean.roast_level,
             tea_type=bean.tea_type,
             produced_on=bean.produced_on.isoformat() if bean.produced_on else None,
+            origin=bean.origin,
         )
 
     def to_dict(self) -> dict:
@@ -127,6 +129,7 @@ class BeanSnapshot:
             "roast_level": self.roast_level,
             "tea_type": self.tea_type,
             "produced_on": self.produced_on,
+            "origin": self.origin,
         }
 
     @classmethod
@@ -138,6 +141,7 @@ class BeanSnapshot:
             roast_level=data.get("roast_level"),
             tea_type=data.get("tea_type"),
             produced_on=data.get("produced_on"),
+            origin=data.get("origin"),
         )
 
 
