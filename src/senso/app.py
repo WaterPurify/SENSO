@@ -14,6 +14,7 @@ from senso.characters.lines import (
 from senso.db.bean_repo import BeanRepository
 from senso.db.brew_repo import BrewRepository
 from senso.db.database import open_database, schema_version
+from senso.db.quiz_repo import QuizRepository
 from senso.db.recommendation_repo import RecommendationRepository
 from senso.domain.bean import Bean, BeanKind
 from senso.domain.brew import Brew, BrewDraft
@@ -21,6 +22,8 @@ from senso.photos import load_photo
 from senso.recommend.apply import draft_from_recommendation
 from senso.recommend.engine import Recommendation, recommend
 from senso.samples import add_samples, remove_samples
+from senso.taste.dna import compute as compute_dna
+from senso.taste.quiz import QuizResult
 from senso.ui import theme
 from senso.ui.components.character import speech_bubble
 from senso.ui.components.compare import compare_table, recipe_values
@@ -32,6 +35,7 @@ from senso.ui.views.brew_form import BrewFormDeps, brew_form_view
 from senso.ui.views.compare_view import compare_view
 from senso.ui.views.home import home_view
 from senso.ui.views.me import me_view
+from senso.ui.views.quiz_view import QuizDeps, quiz_view
 from senso.ui.views.recommend_view import RecommendDeps, recommend_view
 
 TABS = [
@@ -59,6 +63,7 @@ def main(page: ft.Page) -> None:
     beans = BeanRepository(conn)
     brews = BrewRepository(conn)
     recommendations = RecommendationRepository(conn)
+    quizzes = QuizRepository(conn)
     photo_dir = config.photos_dir()
 
     picker = ft.FilePicker()  # 페이지에 서비스로 등록된다
@@ -78,6 +83,25 @@ def main(page: ft.Page) -> None:
             with open(f.path, "rb") as fh:
                 return fh.read()
         return None
+
+    async def save_png(data: bytes, file_name: str) -> None:
+        """웹·폰에서는 내용을 넘겨 내려받게 하고, PC 창에서는 고른 위치에 직접 쓴다."""
+        try:
+            path = await picker.save_file(
+                dialog_title="카드 이미지 저장",
+                file_name=file_name,
+                file_type=ft.FilePickerFileType.CUSTOM,
+                allowed_extensions=["png"],
+                src_bytes=data,
+            )
+        except Exception:
+            notify("이미지를 저장하지 못했어요.")
+            return
+        if path and not page.web:
+            with open(path, "wb") as fh:
+                fh.write(data)
+        if path or page.web:
+            notify("카드 이미지를 저장했어요.")
 
     def notify(message: str) -> None:
         page.show_dialog(ft.SnackBar(message))
@@ -111,11 +135,14 @@ def main(page: ft.Page) -> None:
         controls=[ft.Container(content=content, max_width=CONTENT_MAX_WIDTH)],
     )
 
+    attached = {"scroller": False}
+
     def show(control: ft.Control) -> None:
         """화면을 바꾸고, 새 화면은 맨 위에서 시작한다."""
         content.content = control
         page.update()
-        if scroller.page is not None:
+        # scroller는 page.add() 이후에만 화면에 붙어 있다 (그 전에는 .page 접근이 오류)
+        if attached["scroller"]:
             page.run_task(scroller.scroll_to, offset=0, duration=0)
 
     # ---- 화면 만들기 ------------------------------------------------------
@@ -306,7 +333,22 @@ def main(page: ft.Page) -> None:
                 on_open=lambda b: open_bean_form(kind, b),
                 top=[speech_bubble(beans_greeting(kind, len(items)))],
             )
-        return me_view(version)
+        return me_view(
+            version,
+            quizzes.latest(),
+            compute_dna(brews.list()),
+            on_quiz=open_quiz,
+            on_open=lambda b: open_brew_detail(b.id),
+        )
+
+    def open_quiz() -> None:
+        def done(answers: list[int], result: QuizResult) -> None:
+            quizzes.save(answers, result.type.code, config.now())
+
+        nav.selected_index = TAB_ME
+        show(
+            quiz_view(QuizDeps(on_done=done, on_close=lambda: open_tab(TAB_ME), save_png=save_png))
+        )
 
     nav = ft.NavigationBar(
         bgcolor=theme.CREAM,
@@ -319,4 +361,5 @@ def main(page: ft.Page) -> None:
     )
     page.navigation_bar = nav
     page.add(ft.SafeArea(expand=True, content=scroller))
+    attached["scroller"] = True
     open_tab(TAB_HOME)

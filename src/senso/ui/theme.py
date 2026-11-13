@@ -36,12 +36,13 @@ def app_theme() -> ft.Theme:
 
 FONT_FAMILY = "Pretendard"
 # 웹 화면의 기본 글꼴은 한글 일부(예: '관')가 늦게 그려지거나 빠지는 경우가 있어
-# 한글 전체를 담은 Pretendard를 쓴다. (폰 빌드 전에 assets 폴더에 넣어 오프라인에서도 쓰게 할 예정)
-FONT_URL = "https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/public/static/Pretendard-Regular.otf"
+# 한글 전체를 담은 Pretendard(SIL OFL 1.1)를 앱 안(assets/fonts)에 넣어 오프라인에서도 쓴다.
+FONT_ASSET = "fonts/Pretendard-Regular.otf"
+FONT_BOLD_ASSET = "fonts/Pretendard-Bold.otf"
 
 
 def apply(page: ft.Page) -> None:
-    page.fonts = {FONT_FAMILY: FONT_URL}
+    page.fonts = {FONT_FAMILY: FONT_ASSET}
     page.theme = app_theme()
     page.theme_mode = ft.ThemeMode.LIGHT  # 다크 모드는 MVP 이후
     page.bgcolor = IVORY
