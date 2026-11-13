@@ -146,6 +146,18 @@ class BrewRepository:
         with self.conn:
             self.conn.execute("DELETE FROM brews WHERE id = ?", (brew_id,))
 
+    def has_samples(self) -> bool:
+        return (
+            self.conn.execute("SELECT 1 FROM brews WHERE is_sample = 1 LIMIT 1").fetchone()
+            is not None
+        )
+
+    def delete_samples(self) -> int:
+        """예시 기록을 모두 지우고 지운 개수를 돌려준다. 실제 기록은 건드리지 않는다."""
+        with self.conn:
+            cur = self.conn.execute("DELETE FROM brews WHERE is_sample = 1")
+        return cur.rowcount
+
     def derived_from(self, brew_id: int) -> list[Brew]:
         """이 기록을 바탕으로 만든 기록들 (최신순)."""
         rows = self.conn.execute(

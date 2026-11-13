@@ -59,12 +59,14 @@ class BeanRepository:
         row = self.conn.execute(sql, (bean_id,)).fetchone()
         return _to_bean(row) if row else None
 
-    def create(self, draft: BeanDraft, photo_path: str | None = None) -> Bean:
+    def create(
+        self, draft: BeanDraft, photo_path: str | None = None, is_sample: bool = False
+    ) -> Bean:
         with self.conn:
             cur = self.conn.execute(
                 "INSERT INTO beans (kind, name, producer, produced_on, roast_level, tea_type, "
-                "photo_path) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (draft.kind.value, *_values(draft), photo_path),
+                "photo_path, is_sample) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (draft.kind.value, *_values(draft), photo_path, int(is_sample)),
             )
         bean = self.get(cur.lastrowid)
         assert bean is not None
@@ -84,6 +86,14 @@ class BeanRepository:
         bean = self.get(bean_id)
         assert bean is not None
         return bean
+
+    def soft_delete_samples(self) -> None:
+        """예시 원두·차를 목록에서 숨긴다 (실제 기록에 쓰였을 수 있어 행은 남긴다)."""
+        with self.conn:
+            self.conn.execute(
+                "UPDATE beans SET deleted_at = datetime('now') "
+                "WHERE is_sample = 1 AND deleted_at IS NULL"
+            )
 
     def soft_delete(self, bean_id: int) -> None:
         """목록에서만 숨긴다. 이 원두를 쓴 과거 기록은 그대로 남는다."""

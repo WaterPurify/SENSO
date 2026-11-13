@@ -1,5 +1,7 @@
 """앱 조립: DB 열기, 테마 적용, 하단 탭(기록·커피·차·나)과 화면 전환."""
 
+from collections.abc import Callable
+
 import flet as ft
 
 from senso import config
@@ -7,11 +9,13 @@ from senso.db.bean_repo import BeanRepository
 from senso.db.brew_repo import BrewRepository
 from senso.db.database import open_database, schema_version
 from senso.domain.bean import Bean, BeanKind
-from senso.domain.brew import Brew
+from senso.domain.brew import Brew, BrewDraft
 from senso.photos import load_photo
+from senso.samples import add_samples, remove_samples
 from senso.ui import theme
 from senso.ui.views.bean_form import FormDeps, bean_form_view
 from senso.ui.views.bean_list import bean_list_view
+from senso.ui.views.brew_detail import DetailDeps, brew_detail_view
 from senso.ui.views.brew_form import BrewFormDeps, brew_form_view
 from senso.ui.views.home import home_view
 from senso.ui.views.me import me_view
@@ -108,28 +112,98 @@ def main(page: ft.Page) -> None:
         nav.selected_index = tab
         show(bean_form_view(kind, bean, deps))
 
-    def brew_deps() -> BrewFormDeps:
+    def brew_deps(back: Callable[[], None]) -> BrewFormDeps:
         return BrewFormDeps(
             beans=beans,
             brews=brews,
             now=config.now,
             notify=notify,
-            on_saved=lambda _brew: open_tab(TAB_HOME),
-            on_cancel=lambda: open_tab(TAB_HOME),
+            on_saved=lambda brew: open_brew_detail(brew.id),
+            on_cancel=back,
             on_add_bean=lambda: open_bean_form(BeanKind.COFFEE),
         )
 
-    def open_brew_form(editing: Brew | None = None) -> None:
+    def open_brew_form(
+        editing: Brew | None = None,
+        prefill: BrewDraft | None = None,
+        banner: ft.Control | None = None,
+        back: Callable[[], None] | None = None,
+    ) -> None:
+        if back is None:
+            back = (
+                (lambda: open_brew_detail(editing.id)) if editing else (lambda: open_tab(TAB_HOME))
+            )
         nav.selected_index = TAB_HOME
-        show(brew_form_view(brew_deps(), editing=editing))
+        show(brew_form_view(brew_deps(back), editing=editing, prefill=prefill, banner=banner))
+
+    def open_brew_detail(brew_id: int) -> None:
+        brew = brews.get(brew_id)
+        if brew is None:
+            notify("기록을 찾을 수 없어요.")
+            open_tab(TAB_HOME)
+            return
+        nav.selected_index = TAB_HOME
+        show(
+            brew_detail_view(
+                brew,
+                DetailDeps(
+                    brews=brews,
+                    notify=notify,
+                    confirm=confirm,
+                    on_back=lambda: open_tab(TAB_HOME),
+                    on_edit=lambda b: open_brew_form(editing=b),
+                    on_open=open_brew_detail,
+                    on_deleted=lambda: open_tab(TAB_HOME),
+                ),
+            )
+        )
+
+    def on_add_samples() -> None:
+        count = add_samples(beans, brews, config.now())
+        notify(f"예시 기록 {count}개를 넣었어요. 카드에 '예시' 표시가 붙어 있어요.")
+        open_tab(TAB_HOME)
+
+    def on_remove_samples() -> None:
+        def really() -> None:
+            count = remove_samples(beans, brews)
+            notify(f"예시 기록 {count}개를 지웠어요. 직접 남긴 기록은 그대로예요.")
+            open_tab(TAB_HOME)
+
+        confirm(
+            "예시 데이터를 지울까요?",
+            "'예시' 표시가 붙은 기록과 원두·차만 지워요.\n직접 남긴 기록은 그대로 남아요.",
+            "지우기",
+            really,
+        )
 
     def build_tab(index: int) -> ft.Control:
         if index == TAB_HOME:
+            all_brews = brews.list()
+            top: list[ft.Control] = []
+            bottom: list[ft.Control] = []
+            if not all_brews:
+                bottom.append(
+                    ft.TextButton(
+                        "예시 기록으로 둘러보기",
+                        icon=ft.Icons.TOUR_OUTLINED,
+                        on_click=lambda _: on_add_samples(),
+                    )
+                )
+            elif brews.has_samples():
+                bottom.append(
+                    ft.TextButton(
+                        "예시 데이터 지우기",
+                        icon=ft.Icons.CLEANING_SERVICES_OUTLINED,
+                        on_click=lambda _: on_remove_samples(),
+                    )
+                )
             return home_view(
-                brews.list(),
+                all_brews,
                 on_new=open_brew_form,
                 on_add_coffee=lambda: open_bean_form(BeanKind.COFFEE),
-                on_open=open_brew_form,
+                on_open=lambda b: open_brew_detail(b.id),
+                top=top,
+                bottom=bottom,
             )
         if index in TAB_KINDS:
             kind = TAB_KINDS[index]
