@@ -1,4 +1,4 @@
-"""① 홈·기록 목록. W1에서는 빈 상태와 버튼만 있다."""
+"""① 홈·기록 목록. 기록 기능은 W3에서 만든다."""
 
 from collections.abc import Callable
 
@@ -9,7 +9,7 @@ from senso.ui.components.empty_state import empty_state
 from senso.ui.components.header import header
 
 
-def home_view(on_not_ready: Callable[[str], None]) -> ft.Control:
+def home_view(on_not_ready: Callable[[str], None], on_add_coffee: Callable[[], None]) -> ft.Control:
     return ft.Column(
         spacing=theme.SPACING,
         controls=[
@@ -29,7 +29,7 @@ def home_view(on_not_ready: Callable[[str], None]) -> ft.Control:
                         icon=ft.Icons.COFFEE,
                         height=48,
                         expand=True,
-                        on_click=lambda _: on_not_ready("원두 등록"),
+                        on_click=lambda _: on_add_coffee(),
                     ),
                 ],
             ),

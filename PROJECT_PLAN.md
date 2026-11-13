@@ -77,7 +77,7 @@ SENSO/app/
 ```
 
 ### 데이터 모델(핵심)
-- **beans**: id, kind(coffee/tea), name, roastery, roast_date, roast_level, photo_path, deleted_at
+- **beans**: id, kind(coffee/tea), name, producer(로스터리 / 브랜드·찻집), produced_on(로스팅 날짜 / 제조일), roast_level(커피), tea_type(차), photo_path, deleted_at  ← 스키마 v2
 - **brews**: id, bean_id, **bean_snapshot(JSON)**, brewed_at, desired_flavors, hot_or_iced, equipment(JSON), dose_g, water_g, temp_c, grind(문자열), time_s, ice_g, notes, acidity/bitterness/sweetness/body(NULL = 미입력), satisfaction, next_wish, based_on_brew_id, based_on_rec_id, is_sample
 - **recommendations**: id, source_brew_id, changed_field, from_value, to_value_or_direction, reason, method('rule-v1')
 - **quiz_results**: id, taken_at, answers(JSON), type_code
@@ -91,7 +91,7 @@ SENSO/app/
 | 주차 | 목표 | 주요 작업 | 완료 기준 |
 |---|---|---|---|
 | **W1** | 개발 환경·뼈대 | Git 초기화, venv, `pyproject.toml`, VS Code 설정(F5 실행·pytest), Flet 앱 뼈대, 하단 탭 3개, 테마, SQLite 스키마 v1과 마이그레이션 | F5로 PC 창에 탭 3개가 뜨고 DB 파일과 테이블이 생기며 pytest 1개가 통과 |
-| **W2** | 원두·차 등록 | 등록·목록·수정·소프트 삭제, 사진 선택 후 앱 폴더로 복사, 사진 없이도 등록 가능, 입력 검증. 폰(Flet 앱)에서 처음 확인 | 앱을 다시 열어도 원두와 사진이 남아 있음 |
+| **W2** | 원두·차 등록 (하단 탭을 기록·커피·차·나 4개로 분리) | 등록·목록·수정·소프트 삭제, 사진 선택 후 앱 폴더로 복사, 사진 없이도 등록 가능, 입력 검증. 폰(Flet 앱)에서 처음 확인 | 앱을 다시 열어도 원두와 사진이 남아 있음 |
 | **W3** | 추출·시음 기록 | 추출 전·후를 나눈 입력 폼, 필수 항목을 먼저 보이고 상세 항목은 접기, 단위 표시, 1–5점 입력(미입력과 구분), 평가 없이 저장 | 원두를 골라 기록을 저장하고, 나중에 평가만 추가할 수 있음 |
 | **W4** | 목록·상세·수정·삭제 | 홈의 최신순 카드, 상세 화면, 수정, 삭제 확인 창, 빈 목록·저장 성공·오류 안내(SnackBar), 예시 데이터 표시 | Coffee Bible 완료 기준 1–4번 충족 |
 | **W5** | 규칙 기반 추천 | `recommend/` 엔진 구현: "다음에 원하는 맛"을 먼저 반영, 한 조건만 변경, "조금 더 곱게"처럼 방향으로 표현, 정보가 부족하거나 평가가 충돌하면 추천 보류. pytest 작성 | 테스트 케이스 20개 이상 통과, 상세 화면에서 "다음 레시피 보기"가 동작 |
