@@ -5,19 +5,31 @@ from collections.abc import Callable
 import flet as ft
 
 from senso import config
+from senso.characters.lines import (
+    beans_greeting,
+    brew_again_line,
+    home_greeting,
+    recommendation_line,
+)
 from senso.db.bean_repo import BeanRepository
 from senso.db.brew_repo import BrewRepository
 from senso.db.database import open_database, schema_version
+from senso.db.recommendation_repo import RecommendationRepository
 from senso.domain.bean import Bean, BeanKind
 from senso.domain.brew import Brew, BrewDraft
 from senso.photos import load_photo
-from senso.recommend.engine import recommend
+from senso.recommend.apply import draft_from_recommendation
+from senso.recommend.engine import Recommendation, recommend
 from senso.samples import add_samples, remove_samples
 from senso.ui import theme
+from senso.ui.components.character import speech_bubble
+from senso.ui.components.compare import compare_table, recipe_values
+from senso.ui.components.inputs import section
 from senso.ui.views.bean_form import FormDeps, bean_form_view
 from senso.ui.views.bean_list import bean_list_view
 from senso.ui.views.brew_detail import DetailDeps, brew_detail_view
 from senso.ui.views.brew_form import BrewFormDeps, brew_form_view
+from senso.ui.views.compare_view import compare_view
 from senso.ui.views.home import home_view
 from senso.ui.views.me import me_view
 from senso.ui.views.recommend_view import RecommendDeps, recommend_view
@@ -46,6 +58,7 @@ def main(page: ft.Page) -> None:
     version = schema_version(conn)
     beans = BeanRepository(conn)
     brews = BrewRepository(conn)
+    recommendations = RecommendationRepository(conn)
     photo_dir = config.photos_dir()
 
     picker = ft.FilePicker()  # 페이지에 서비스로 등록된다
@@ -91,10 +104,19 @@ def main(page: ft.Page) -> None:
         )
 
     content = ft.Container(padding=ft.Padding.symmetric(horizontal=20, vertical=16))
+    scroller = ft.Column(
+        expand=True,
+        scroll=ft.ScrollMode.AUTO,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=[ft.Container(content=content, max_width=CONTENT_MAX_WIDTH)],
+    )
 
     def show(control: ft.Control) -> None:
+        """화면을 바꾸고, 새 화면은 맨 위에서 시작한다."""
         content.content = control
         page.update()
+        if scroller.page is not None:
+            page.run_task(scroller.scroll_to, offset=0, duration=0)
 
     # ---- 화면 만들기 ------------------------------------------------------
     def open_tab(index: int) -> None:
@@ -157,6 +179,7 @@ def main(page: ft.Page) -> None:
                     on_open=open_brew_detail,
                     on_deleted=lambda: open_tab(TAB_HOME),
                     on_recommend=lambda b: open_recommendation(b.id),
+                    on_compare=open_compare,
                 ),
             )
         )
@@ -167,6 +190,32 @@ def main(page: ft.Page) -> None:
             open_tab(TAB_HOME)
             return
         nav.selected_index = TAB_HOME
+
+        def bubble(b: Brew, result) -> list[ft.Control]:
+            return [speech_bubble(recommendation_line(b.kind, result))]
+
+        def recipe_compare(b: Brew, result) -> list[ft.Control]:
+            if not isinstance(result, Recommendation):
+                return []
+            overrides = {}
+            if result.direction_only:
+                overrides[result.field_label] = f"{result.to_value}"
+            return [
+                section(
+                    "지금 레시피와 비교",
+                    "노란 칸만 바꿔요",
+                    [
+                        compare_table(
+                            "지금",
+                            "제안",
+                            recipe_values(b.recipe, b.kind, b.iced),
+                            recipe_values(result.new_recipe, b.kind, b.iced),
+                            overrides=overrides,
+                        )
+                    ],
+                )
+            ]
+
         show(
             recommend_view(
                 brew,
@@ -176,9 +225,28 @@ def main(page: ft.Page) -> None:
                     on_edit=lambda b: open_brew_form(
                         editing=b, back=lambda: open_recommendation(brew_id)
                     ),
+                    on_brew_again=brew_again,
+                    extra_top=bubble,
+                    extra_bottom=recipe_compare,
                 ),
             )
         )
+
+    def brew_again(brew: Brew, rec: Recommendation) -> None:
+        saved = recommendations.save(brew.id, rec)
+        open_brew_form(
+            prefill=draft_from_recommendation(brew, rec, saved.id),
+            banner=speech_bubble(brew_again_line(brew.kind, rec)),
+            back=lambda: open_recommendation(brew.id),
+        )
+
+    def open_compare(before_id: int, after_id: int) -> None:
+        before, after = brews.get(before_id), brews.get(after_id)
+        if before is None or after is None:
+            notify("비교할 기록을 찾을 수 없어요.")
+            return
+        nav.selected_index = TAB_HOME
+        show(compare_view(before, after, on_back=lambda: open_brew_detail(after_id)))
 
     def on_add_samples() -> None:
         count = add_samples(beans, brews, config.now())
@@ -201,7 +269,7 @@ def main(page: ft.Page) -> None:
     def build_tab(index: int) -> ft.Control:
         if index == TAB_HOME:
             all_brews = brews.list()
-            top: list[ft.Control] = []
+            top: list[ft.Control] = [speech_bubble(home_greeting(config.now(), len(all_brews)))]
             bottom: list[ft.Control] = []
             if not all_brews:
                 bottom.append(
@@ -229,12 +297,14 @@ def main(page: ft.Page) -> None:
             )
         if index in TAB_KINDS:
             kind = TAB_KINDS[index]
+            items = beans.list(kind)
             return bean_list_view(
                 kind,
-                beans.list(kind),
+                items,
                 load_photo=lambda name: load_photo(name, photo_dir),
                 on_add=lambda: open_bean_form(kind),
                 on_open=lambda b: open_bean_form(kind, b),
+                top=[speech_bubble(beans_greeting(kind, len(items)))],
             )
         return me_view(version)
 
@@ -248,15 +318,5 @@ def main(page: ft.Page) -> None:
         on_change=lambda e: open_tab(e.control.selected_index),
     )
     page.navigation_bar = nav
-    page.add(
-        ft.SafeArea(
-            expand=True,
-            content=ft.Column(
-                expand=True,
-                scroll=ft.ScrollMode.AUTO,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                controls=[ft.Container(content=content, max_width=CONTENT_MAX_WIDTH)],
-            ),
-        )
-    )
+    page.add(ft.SafeArea(expand=True, content=scroller))
     open_tab(TAB_HOME)

@@ -23,6 +23,7 @@ class DetailDeps:
     on_open: Callable[[int], None]
     on_deleted: Callable[[], None]
     on_recommend: Callable[[Brew], None] | None = None
+    on_compare: Callable[[int, int], None] | None = None  # (이전 기록 id, 이 기록 id)
 
 
 def info_row(label: str, value: str) -> ft.Control:
@@ -146,6 +147,14 @@ def brew_detail_view(brew: Brew, deps: DetailDeps) -> ft.Control:
                     on_click=lambda _: deps.on_open(parent.id),
                 )
             )
+            if deps.on_compare:
+                links.append(
+                    ft.OutlinedButton(
+                        "이전 기록과 비교",
+                        icon=ft.Icons.COMPARE_ARROWS,
+                        on_click=lambda _: deps.on_compare(parent.id, brew.id),
+                    )
+                )
     for child in deps.brews.derived_from(brew.id):
         links.append(
             ft.TextButton(

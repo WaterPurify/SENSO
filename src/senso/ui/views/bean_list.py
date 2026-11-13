@@ -5,6 +5,7 @@ from collections.abc import Callable
 import flet as ft
 
 from senso.domain.bean import LABELS, ROAST_LEVELS, TEA_TYPES, Bean, BeanKind
+from senso.text import josa
 from senso.ui import theme
 from senso.ui.components.empty_state import empty_state
 from senso.ui.components.header import header
@@ -92,10 +93,12 @@ def bean_list_view(
     load_photo: Callable[[str], bytes | None],
     on_add: Callable[[], None],
     on_open: Callable[[Bean], None],
+    top: list[ft.Control] | None = None,
 ) -> ft.Control:
     labels = LABELS[kind]
     controls: list[ft.Control] = [
         header(labels.title, SUBTITLES[kind]),
+        *(top or []),
         ft.FilledButton(
             f"{labels.item} 등록",
             icon=ft.Icons.ADD,
@@ -110,6 +113,8 @@ def bean_list_view(
         ]
     else:
         controls.append(
-            empty_state(KIND_ICONS[kind], f"등록한 {labels.item}가 없어요", EMPTY_MESSAGES[kind])
+            empty_state(
+                KIND_ICONS[kind], f"등록한 {josa(labels.item, '이')} 없어요", EMPTY_MESSAGES[kind]
+            )
         )
     return ft.Column(spacing=12, controls=controls)
