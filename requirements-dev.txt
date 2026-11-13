@@ -1,0 +1,4 @@
+flet[cli,web]==1.1.2
+pillow>=13.0
+pytest>=9.2
+ruff>=0.17

@@ -1,0 +1,24 @@
+# 사용법
+#   앱 실행:   docker compose up app      → 브라우저에서 http://localhost:8550
+#   테스트:    docker compose run --rm test
+#   정리:      docker compose down        (데이터는 senso-data 볼륨에 남음)
+
+services:
+  app:
+    build: .
+    image: senso-dev
+    ports:
+      - "8550:8550"
+    volumes:
+      - .:/app                  # 코드를 고치면 컨테이너에 바로 반영
+      - senso-data:/data        # DB와 사진 (OneDrive 폴더 밖에 보관)
+
+  test:
+    image: senso-dev
+    build: .
+    volumes:
+      - .:/app
+    command: ["pytest", "-q"]
+
+volumes:
+  senso-data:

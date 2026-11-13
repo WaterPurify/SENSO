@@ -1,0 +1,35 @@
+[project]
+name = "senso"
+version = "0.1.0"
+description = "SENSO - Sen & So와 함께 찾는 나만의 커피·차 한 잔"
+requires-python = ">=3.12"
+dependencies = [
+    "flet==1.1.2",
+    "pillow>=13.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2",
+    "ruff>=0.17",
+]
+
+[tool.flet]
+org = "com.senso"
+product = "SENSO"
+company = "SENSO"
+
+[tool.flet.app]
+path = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

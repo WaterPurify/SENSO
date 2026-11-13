@@ -1,0 +1,26 @@
+{
+  // VS Code "Dev Containers: Reopen in Container"로 이 컨테이너 안에서 작업한다.
+  "name": "SENSO (Python + Flet)",
+  "dockerComposeFile": "../compose.yaml",
+  "service": "app",
+  "workspaceFolder": "/app",
+  // 컨테이너는 켜 두기만 하고, 앱은 F5(또는 터미널)로 직접 실행한다
+  "overrideCommand": true,
+  "forwardPorts": [8550],
+  "portsAttributes": {
+    "8550": { "label": "SENSO 웹", "onAutoForward": "openBrowser" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      }
+    }
+  }
+}

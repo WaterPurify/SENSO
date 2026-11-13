@@ -1,0 +1,2 @@
+# 컨테이너(Linux)와 같이 쓰므로 줄바꿈은 LF로 통일
+* text=auto eol=lf
