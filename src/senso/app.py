@@ -4,12 +4,15 @@ import flet as ft
 
 from senso import config
 from senso.db.bean_repo import BeanRepository
+from senso.db.brew_repo import BrewRepository
 from senso.db.database import open_database, schema_version
 from senso.domain.bean import Bean, BeanKind
+from senso.domain.brew import Brew
 from senso.photos import load_photo
 from senso.ui import theme
 from senso.ui.views.bean_form import FormDeps, bean_form_view
 from senso.ui.views.bean_list import bean_list_view
+from senso.ui.views.brew_form import BrewFormDeps, brew_form_view
 from senso.ui.views.home import home_view
 from senso.ui.views.me import me_view
 
@@ -36,6 +39,7 @@ def main(page: ft.Page) -> None:
     page.on_close = lambda _: conn.close()
     version = schema_version(conn)
     beans = BeanRepository(conn)
+    brews = BrewRepository(conn)
     photo_dir = config.photos_dir()
 
     picker = ft.FilePicker()  # 페이지에 서비스로 등록된다
@@ -104,11 +108,28 @@ def main(page: ft.Page) -> None:
         nav.selected_index = tab
         show(bean_form_view(kind, bean, deps))
 
+    def brew_deps() -> BrewFormDeps:
+        return BrewFormDeps(
+            beans=beans,
+            brews=brews,
+            now=config.now,
+            notify=notify,
+            on_saved=lambda _brew: open_tab(TAB_HOME),
+            on_cancel=lambda: open_tab(TAB_HOME),
+            on_add_bean=lambda: open_bean_form(BeanKind.COFFEE),
+        )
+
+    def open_brew_form(editing: Brew | None = None) -> None:
+        nav.selected_index = TAB_HOME
+        show(brew_form_view(brew_deps(), editing=editing))
+
     def build_tab(index: int) -> ft.Control:
         if index == TAB_HOME:
             return home_view(
-                on_not_ready=lambda f: notify(f"'{f}' 기능은 곧 만들어질 예정이에요."),
+                brews.list(),
+                on_new=open_brew_form,
                 on_add_coffee=lambda: open_bean_form(BeanKind.COFFEE),
+                on_open=open_brew_form,
             )
         if index in TAB_KINDS:
             kind = TAB_KINDS[index]

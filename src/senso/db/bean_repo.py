@@ -1,5 +1,8 @@
 """원두·차 저장소. 화면 코드는 SQL을 직접 쓰지 않고 이 클래스를 쓴다."""
 
+# 메서드 이름 list가 내장 list를 가리므로 타입 표기를 문자열로 미룬다
+from __future__ import annotations
+
 import sqlite3
 from datetime import date
 
@@ -44,6 +47,10 @@ class BeanRepository:
             (kind.value,),
         ).fetchall()
         return [_to_bean(r) for r in rows]
+
+    def list_all(self) -> list[Bean]:
+        """커피와 차를 함께. 커피 먼저, 각각 최근 수정한 순서로."""
+        return self.list(BeanKind.COFFEE) + self.list(BeanKind.TEA)
 
     def get(self, bean_id: int, include_deleted: bool = False) -> Bean | None:
         sql = f"SELECT {_COLUMNS} FROM beans WHERE id = ?"
