@@ -7,6 +7,7 @@ services:
   app:
     build: .
     image: senso-dev
+    restart: unless-stopped     # Docker Desktop을 다시 켜면 앱도 자동으로 다시 뜸
     ports:
       - "8550:8550"
     volumes:
