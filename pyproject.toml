@@ -34,3 +34,8 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# 화면에 그대로 보여 줄 한국어 문장은 줄을 나누지 않는다
+"src/senso/recommend/engine.py" = ["E501"]
+"src/senso/characters/*.py" = ["E501"]

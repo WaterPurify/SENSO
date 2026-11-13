@@ -19,6 +19,7 @@ from senso.domain.bean import (
     validate_bean,
 )
 from senso.photos import PhotoError, delete_photo, load_photo, save_photo
+from senso.text import josa, quote
 from senso.ui import theme
 
 PickImage = Callable[[], Awaitable[bytes | None]]
@@ -168,7 +169,7 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
             return
         if bean is None:
             deps.repo.create(draft, photo_path=state["current"])
-            deps.notify(f"'{draft.name}'을(를) 등록했어요.")
+            deps.notify(f"{josa(quote(draft.name), '을')} 등록했어요.")
         else:
             deps.repo.update(bean.id, draft, photo_path=state["current"])
             if original_photo and original_photo != state["current"]:
@@ -186,13 +187,13 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
         def really_delete() -> None:
             discard_unsaved_photo()
             deps.repo.soft_delete(bean.id)
-            deps.notify(f"'{bean.name}'을(를) 목록에서 지웠어요.")
+            deps.notify(f"{josa(quote(bean.name), '을')} 목록에서 지웠어요.")
             deps.close()
 
         deps.confirm(
-            f"{labels.item}를 지울까요?",
-            f"'{bean.name}'이(가) 목록에서 사라져요.\n"
-            f"이 {labels.item}로 남긴 기록은 그대로 남아요.",
+            f"{josa(labels.item, '을')} 지울까요?",
+            f"{josa(quote(bean.name), '이')} 목록에서 사라져요.\n"
+            f"이 {josa(labels.item, '으로')} 남긴 기록은 그대로 남아요.",
             "지우기",
             really_delete,
         )

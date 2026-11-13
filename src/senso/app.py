@@ -11,6 +11,7 @@ from senso.db.database import open_database, schema_version
 from senso.domain.bean import Bean, BeanKind
 from senso.domain.brew import Brew, BrewDraft
 from senso.photos import load_photo
+from senso.recommend.engine import recommend
 from senso.samples import add_samples, remove_samples
 from senso.ui import theme
 from senso.ui.views.bean_form import FormDeps, bean_form_view
@@ -19,6 +20,7 @@ from senso.ui.views.brew_detail import DetailDeps, brew_detail_view
 from senso.ui.views.brew_form import BrewFormDeps, brew_form_view
 from senso.ui.views.home import home_view
 from senso.ui.views.me import me_view
+from senso.ui.views.recommend_view import RecommendDeps, recommend_view
 
 TABS = [
     (ft.Icons.HOME_OUTLINED, ft.Icons.HOME, "기록"),
@@ -154,6 +156,26 @@ def main(page: ft.Page) -> None:
                     on_edit=lambda b: open_brew_form(editing=b),
                     on_open=open_brew_detail,
                     on_deleted=lambda: open_tab(TAB_HOME),
+                    on_recommend=lambda b: open_recommendation(b.id),
+                ),
+            )
+        )
+
+    def open_recommendation(brew_id: int) -> None:
+        brew = brews.get(brew_id)
+        if brew is None:
+            open_tab(TAB_HOME)
+            return
+        nav.selected_index = TAB_HOME
+        show(
+            recommend_view(
+                brew,
+                recommend(brew),
+                RecommendDeps(
+                    on_back=lambda: open_brew_detail(brew_id),
+                    on_edit=lambda b: open_brew_form(
+                        editing=b, back=lambda: open_recommendation(brew_id)
+                    ),
                 ),
             )
         )
