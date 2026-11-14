@@ -1,0 +1,67 @@
+name: SENSO checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y age
+      - run: python -m pip install --require-hashes --no-deps -r requirements.lock
+      - run: python -m pip install pytest==9.2.0 ruff==0.17.5
+      - run: ruff check src tests ops
+      - run: pytest -q
+      - name: Operator script failure recovery
+        shell: pwsh
+        run: ./tests/backup_script.Tests.ps1
+  production-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f Dockerfile.prod -t senso-ci .
+      - run: docker build -f ops/Dockerfile -t senso-backup-ci .
+      - name: Verify runtime user and excluded development tools
+        run: |
+          docker run --rm --entrypoint python senso-ci -c "import os,importlib.util,senso.app; assert os.getuid()==10001; assert importlib.util.find_spec('pytest') is None; assert importlib.util.find_spec('ruff') is None"
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install --require-hashes --no-deps -r requirements.lock
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: Browser regression on disposable data
+        env:
+          PYTHONPATH: src
+          SENSO_DATA_DIR: ${{ runner.temp }}/senso-browser
+          FLET_FORCE_WEB_SERVER: 'true'
+          FLET_SERVER_IP: 127.0.0.1
+          FLET_SERVER_PORT: '8564'
+        run: |
+          python tests/browser_seed.py
+          python src/main.py > "$RUNNER_TEMP/senso-web.log" 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8564/ > /dev/null; then break; fi
+            sleep 1
+          done
+          node tests/browser_smoke.cjs
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-server-log
+          path: ${{ runner.temp }}/senso-web.log

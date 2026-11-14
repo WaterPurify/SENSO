@@ -38,7 +38,8 @@ RUN groupadd --system --gid 10001 senso \
 
 COPY --chown=root:root src/ /app/src/
 RUN find /app/src -type d -name __pycache__ -prune -exec rm -rf {} + \
-    && chmod -R a-w /app/src
+    && find /app/src -type d -exec chmod 555 {} + \
+    && find /app/src -type f -exec chmod 444 {} +
 
 USER senso
 EXPOSE 8550
