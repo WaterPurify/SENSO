@@ -1,11 +1,13 @@
 """앱 조립: DB 열기, 테마 적용, 하단 탭(기록·커피·차·나)과 화면 전환."""
 
+import asyncio
+import time
 from collections.abc import Callable
 
 import flet as ft
 
 from senso import config
-from senso.auth import AuthStore, User
+from senso.auth import AuthError, AuthStore, User
 from senso.characters.lines import (
     beans_greeting,
     brew_again_line,
@@ -21,6 +23,7 @@ from senso.db.settings_repo import WORD_ENABLED, SettingsRepository
 from senso.db.word_repo import WordCard, WordRepository
 from senso.domain.bean import Bean, BeanKind
 from senso.domain.brew import Brew, BrewDraft
+from senso.export import export_zip
 from senso.photos import MAX_INPUT_BYTES, PhotoError, load_photo
 from senso.recommend.apply import draft_from_brew, draft_from_recommendation
 from senso.recommend.engine import Recommendation, recommend
@@ -31,6 +34,7 @@ from senso.ui import theme
 from senso.ui.components.character import speech_bubble
 from senso.ui.components.compare import compare_table, recipe_values
 from senso.ui.components.inputs import section
+from senso.ui.views.account import account_section, delete_dialog, password_dialog
 from senso.ui.views.bean_form import FormDeps, bean_form_view
 from senso.ui.views.bean_list import bean_list_view
 from senso.ui.views.brew_detail import DetailDeps, brew_detail_view
@@ -64,30 +68,55 @@ TAB_HOME, TAB_COFFEE, TAB_TEA, TAB_ME = range(4)
 TAB_KINDS = {TAB_COFFEE: BeanKind.COFFEE, TAB_TEA: BeanKind.TEA}
 
 CONTENT_MAX_WIDTH = 640  # 넓은 화면에서도 폰처럼 가운데 한 줄로
+IDLE_MINUTES = 30  # 이 시간 동안 아무것도 하지 않으면 자동 로그아웃
+IDLE_CHECK_SECONDS = 30
+WRONG_PASSWORD = "아이디 또는 비밀번호를 확인해 주세요."
 
 
-def main(page: ft.Page) -> None:
+def main(page: ft.Page, notice: str | None = None) -> None:
     page.title = "SENSO"
     theme.apply(page)
 
     store = AuthStore(config.data_dir())
-    login_view(page, store, lambda user: authenticated_main(page, user))
+    login_view(page, store, lambda user: authenticated_main(page, user, store), notice=notice)
 
 
-def authenticated_main(page: ft.Page, user: User) -> None:
+def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None) -> None:
+    store = store or AuthStore(config.data_dir())
+    client = getattr(page, "client_ip", None)
     directory = user.directory(config.data_dir())
     # 로그인 성공 후에만 해당 계정의 저장소를 연다.
     conn = open_database(directory / config.DB_FILENAME)
 
     # on_disconnect는 새로고침 등으로 잠깐 끊겨도 불리고 세션은 다시 이어지므로,
     # 세션이 완전히 끝날 때(on_close)만 연결을 닫는다.
+    session = {"alive": True, "active_at": time.monotonic()}
+
     def close_session(_) -> None:
+        if not session["alive"]:
+            return
+        session["alive"] = False
         dispose_view()
         conn.close()
 
-    def logout(_) -> None:
+    def logout(_=None, notice: str | None = None) -> None:
         close_session(None)
-        main(page)
+        page.on_keyboard_event = None
+        main(page, notice)
+
+    # ---- 자동 로그아웃 ------------------------------------------------------
+    def touch(_=None) -> None:
+        session["active_at"] = time.monotonic()
+
+    async def watch_idle() -> None:
+        while session["alive"]:
+            await asyncio.sleep(IDLE_CHECK_SECONDS)
+            idle = time.monotonic() - session["active_at"]
+            if session["alive"] and idle >= IDLE_MINUTES * 60:
+                logout(notice=f"{IDLE_MINUTES}분 동안 사용하지 않아 안전을 위해 로그아웃했어요.")
+                page.update()
+
+    page.on_keyboard_event = touch
 
     page.on_close = close_session
     page.clean()
@@ -126,24 +155,62 @@ def authenticated_main(page: ft.Page, user: User) -> None:
                 return fh.read(MAX_INPUT_BYTES + 1)
         return None
 
-    async def save_png(data: bytes, file_name: str) -> None:
+    async def save_bytes(data: bytes, file_name: str, extension: str, what: str) -> None:
         """웹·폰에서는 내용을 넘겨 내려받게 하고, PC 창에서는 고른 위치에 직접 쓴다."""
         try:
             path = await picker.save_file(
-                dialog_title="카드 이미지 저장",
+                dialog_title=f"{what} 저장",
                 file_name=file_name,
                 file_type=ft.FilePickerFileType.CUSTOM,
-                allowed_extensions=["png"],
+                allowed_extensions=[extension],
                 src_bytes=data,
             )
         except Exception:
-            notify("이미지를 저장하지 못했어요.")
+            notify(f"{what}를 저장하지 못했어요.")
             return
         if path and not page.web:
             with open(path, "wb") as fh:
                 fh.write(data)
         if path or page.web:
-            notify("카드 이미지를 저장했어요.")
+            notify(f"{what}를 저장했어요.")
+
+    async def save_png(data: bytes, file_name: str) -> None:
+        await save_bytes(data, file_name, "png", "카드 이미지")
+
+    # ---- 계정 관리 ----------------------------------------------------------
+    def close_dialog() -> None:
+        page.pop_dialog()
+
+    async def change_password(current: str, new: str) -> str | None:
+        try:
+            await asyncio.to_thread(store.change_password, user, current, new, client)
+        except AuthError as e:
+            return "지금 비밀번호가 맞지 않아요." if str(e) == WRONG_PASSWORD else str(e)
+        page.pop_dialog()
+        notify("비밀번호를 바꿨어요.")
+        return None
+
+    async def export_data() -> None:
+        data = await asyncio.to_thread(export_zip, conn, photo_dir, config.now())
+        stamp = config.now().strftime("%Y%m%d")
+        await save_bytes(data, f"SENSO_내데이터_{stamp}.zip", "zip", "내 데이터")
+
+    async def delete_account(password: str) -> str | None:
+        try:
+            # 먼저 비밀번호를 확인하고, 그다음에 이 계정의 DB 연결을 닫고 지운다
+            await asyncio.to_thread(store.login, user.username, password, client)
+        except AuthError as e:
+            return "비밀번호가 맞지 않아요." if str(e) == WRONG_PASSWORD else str(e)
+        page.pop_dialog()
+        close_session(None)
+        try:
+            await asyncio.to_thread(store.delete_account, user, password, client)
+        except Exception:
+            logout(notice="계정을 지우지 못했어요. 다시 로그인해 주세요.")
+            return None
+        logout(notice="계정과 모든 기록을 지웠어요. 그동안 함께해 줘서 고마워요.")
+        page.update()
+        return None
 
     def notify(message: str) -> None:
         page.show_dialog(ft.SnackBar(message))
@@ -186,6 +253,7 @@ def authenticated_main(page: ft.Page, user: User) -> None:
 
     def show(control: ft.Control, *, scroll_to_top: bool = True) -> None:
         """화면을 바꾸고, 새 화면은 맨 위에서 시작한다."""
+        touch()
         dispose_view()
         frame.width = DESKTOP_WIDTH if isinstance(control, HomeView) else CONTENT_MAX_WIDTH
         content.content = control
@@ -400,10 +468,13 @@ def authenticated_main(page: ft.Page, user: User) -> None:
         back = back or (lambda: open_tab(TAB_HOME))
 
         def picked(mood_key: str, note: str | None) -> None:
+            # 적은 한 줄은 마음 건강과 관련된 민감한 내용일 수 있어 저장하지 않는다.
+            # 위기 신호 확인(화면 안)에만 쓰고 버린다.
+            del note
             now = config.now()
             mood = MOODS_BY_KEY[mood_key]
             verse = pick_verse(mood, now.date())
-            open_word_card(words.create(now.date(), mood_key, verse.ref, note, now))
+            open_word_card(words.create(now.date(), mood_key, verse.ref, None, now))
 
         nav.selected_index = TAB_HOME
         show(word_pick_view(PickDeps(on_back=back, on_pick=picked)))
@@ -499,6 +570,17 @@ def authenticated_main(page: ft.Page, user: User) -> None:
                 on_open=lambda c: open_word_card(c, TAB_ME),
                 on_faith=lambda: open_faith(lambda: open_tab(TAB_ME)),
             ),
+            account_section=account_section(
+                user.username,
+                IDLE_MINUTES,
+                on_password=lambda: page.show_dialog(
+                    password_dialog(change_password, close_dialog)
+                ),
+                on_export=export_data,
+                on_delete=lambda: page.show_dialog(
+                    delete_dialog(user.username, delete_account, close_dialog)
+                ),
+            ),
         )
 
     def open_quiz() -> None:
@@ -523,3 +605,4 @@ def authenticated_main(page: ft.Page, user: User) -> None:
     page.add(ft.SafeArea(expand=True, content=scroller))
     attached["scroller"] = True
     open_tab(TAB_HOME)
+    page.run_task(watch_idle)

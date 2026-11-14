@@ -182,7 +182,7 @@ def test_v4_cards_survive_v5_migration(tmp_path):
         "VALUES ('2026-11-13', 'tired', '마태복음 11:28', 1, '2026-11-13T08:00')"
     )
     c.commit()
-    assert migrate(c, MIGRATIONS_DIR) == 5
+    assert migrate(c, MIGRATIONS_DIR) >= 5
     words = WordRepository(c)
     assert [w.verse_ref for w in words.saved()] == ["마태복음 11:28"]
     words.create(date(2026, 11, 13), "peace", "민수기 6:24-26", None, NOW)  # 이제 같은 날 또 가능

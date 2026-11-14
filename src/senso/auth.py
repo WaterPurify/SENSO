@@ -10,16 +10,33 @@ import shutil
 import sqlite3
 import time
 import uuid
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 from senso import config
+from senso.passwords import weakness
 
 ITERATIONS = 600_000
 MAX_FAILURES = 5
 LOCK_SECONDS = 300
 USERNAME = re.compile(r"^[a-z0-9_]{3,32}$")
+
+# 접속 주소(IP)별·전체 제한. 아이디별 제한만 있으면 여러 아이디를 돌아가며 시도하는
+# 공격(비밀번호 스프레이)을 막지 못한다. 키는 'ip:<주소>', 'global'로 아이디와 겹치지 않는다.
+IP_MAX_FAILURES = 20
+IP_WINDOW = 900  # 15분
+IP_LOCK_SECONDS = 900
+GLOBAL_MAX_FAILURES = 200
+GLOBAL_WINDOW = 300
+GLOBAL_LOCK_SECONDS = 60
+# 회원가입: 주소별 1시간에 3개, 전체 1시간에 50개
+SIGNUP_PER_IP = 3
+SIGNUP_GLOBAL = 50
+SIGNUP_WINDOW = 3600
+
+BUSY = "로그인 시도가 많아요. 잠시 뒤 다시 시도해 주세요."
 
 
 class AuthError(ValueError):
@@ -66,6 +83,9 @@ class AuthStore:
                     username TEXT PRIMARY KEY, failures INTEGER NOT NULL,
                     blocked_until REAL NOT NULL, updated_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS signup_events (
+                    client TEXT NOT NULL, at REAL NOT NULL
+                );
             """)
         self.path.chmod(0o600)
 
@@ -79,27 +99,60 @@ class AuthStore:
         finally:
             conn.close()
 
-    def register(self, username: str, password: str) -> User:
+    def register(self, username: str, password: str, client: str | None = None) -> User:
         name = normalized_username(username)
-        if not 12 <= len(password) <= 128:
-            raise AuthError("비밀번호는 12~128자로 입력해 주세요.")
+        check_new_password(password, name)
+        now = time.time()
+        key = _client_key(client)
+        with self.connection() as conn:
+            conn.execute("DELETE FROM signup_events WHERE at < ?", (now - SIGNUP_WINDOW,))
+            total = conn.execute("SELECT COUNT(*) FROM signup_events").fetchone()[0]
+            mine = conn.execute(
+                "SELECT COUNT(*) FROM signup_events WHERE client = ?", (key,)
+            ).fetchone()[0]
+        if mine >= SIGNUP_PER_IP or total >= SIGNUP_GLOBAL:
+            raise AuthError("지금은 회원가입이 많아요. 1시간 뒤 다시 시도해 주세요.")
         salt = secrets.token_bytes(32)
         digest = _hash(password, salt)
         user = User(uuid.uuid4().hex, name)
         try:
             with self.connection() as conn:
                 conn.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (user.id, name, salt, digest))
+                conn.execute("INSERT INTO signup_events VALUES (?, ?)", (key, now))
         except sqlite3.IntegrityError:
             raise AuthError("이미 사용 중인 아이디예요.") from None
         return user
 
-    def login(self, username: str, password: str) -> User:
+    @staticmethod
+    def _blocked(conn: sqlite3.Connection, keys: list[str], now: float) -> bool:
+        marks = ",".join("?" * len(keys))
+        row = conn.execute(
+            f"SELECT MAX(blocked_until) FROM login_attempts WHERE username IN ({marks})", keys
+        ).fetchone()
+        return bool(row[0] and row[0] > now)
+
+    @staticmethod
+    def _record_failure(
+        conn: sqlite3.Connection, key: str, now: float, limit: int, window: int, lock: int
+    ) -> None:
+        attempt = conn.execute("SELECT * FROM login_attempts WHERE username = ?", (key,)).fetchone()
+        recent = attempt["failures"] if attempt and attempt["updated_at"] > now - window else 0
+        failures = recent + 1
+        conn.execute(
+            "INSERT OR REPLACE INTO login_attempts VALUES (?, ?, ?, ?)",
+            (key, failures, now + lock if failures >= limit else 0, now),
+        )
+
+    def login(self, username: str, password: str, client: str | None = None) -> User:
         name = normalized_username(username)
         failure = "아이디 또는 비밀번호를 확인해 주세요."
         if not 1 <= len(password) <= 128:
             raise AuthError(failure)
         now = time.time()
+        guards = [_client_key(client), "global"]
         with self.connection() as conn:
+            if self._blocked(conn, guards, now):
+                raise AuthError(BUSY)
             attempt = conn.execute(
                 "SELECT * FROM login_attempts WHERE username = ?", (name,)
             ).fetchone()
@@ -127,7 +180,59 @@ class AuthStore:
                 "INSERT OR REPLACE INTO login_attempts VALUES (?, ?, ?, ?)",
                 (name, failures, now + LOCK_SECONDS if failures >= MAX_FAILURES else 0, now),
             )
+            self._record_failure(conn, guards[0], now, IP_MAX_FAILURES, IP_WINDOW, IP_LOCK_SECONDS)
+            self._record_failure(
+                conn, "global", now, GLOBAL_MAX_FAILURES, GLOBAL_WINDOW, GLOBAL_LOCK_SECONDS
+            )
         raise AuthError(failure)
+
+    # ---- 로그인한 사용자의 계정 관리 ---------------------------------------------
+
+    def change_password(self, user: User, current: str, new: str, client: str | None = None):
+        """지금 비밀번호를 확인한 뒤 바꾼다. 확인 실패는 로그인 실패와 같이 센다."""
+        self.login(user.username, current, client)
+        check_new_password(new, user.username)
+        if hmac.compare_digest(current.encode(), new.encode()):
+            raise AuthError("지금 비밀번호와 다른 비밀번호를 입력해 주세요.")
+        salt = secrets.token_bytes(32)
+        with self.connection() as conn:
+            conn.execute(
+                "UPDATE users SET salt = ?, password_hash = ? WHERE id = ?",
+                (salt, _hash(new, salt), user.id),
+            )
+
+    def delete_account(
+        self,
+        user: User,
+        password: str,
+        client: str | None = None,
+        before_delete: Callable[[], None] | None = None,
+    ) -> None:
+        """비밀번호를 확인한 뒤 계정과 그 계정의 기록·사진을 모두 지운다. 되돌릴 수 없다.
+
+        before_delete: 확인이 끝난 뒤, 지우기 직전에 부른다 (열린 DB 연결 닫기 등).
+        """
+        self.login(user.username, password, client)
+        if before_delete:
+            before_delete()
+        directory = user.directory(self.root)  # UUID 검증을 거친 경로
+        with self.connection() as conn:
+            conn.execute("DELETE FROM users WHERE id = ?", (user.id,))
+            conn.execute("DELETE FROM login_attempts WHERE username = ?", (user.username,))
+        shutil.rmtree(directory, ignore_errors=True)
+
+
+def check_new_password(password: str, username: str | None = None) -> None:
+    if not 12 <= len(password) <= 128:
+        raise AuthError("비밀번호는 12~128자로 입력해 주세요.")
+    reason = weakness(password, username)
+    if reason:
+        raise AuthError(reason)
+
+
+def _client_key(client: str | None) -> str:
+    """접속 주소를 제한용 키로. 알 수 없으면 한데 묶는다."""
+    return "ip:" + ((client or "unknown").strip()[:64] or "unknown")
 
 
 def create_account_cli() -> None:

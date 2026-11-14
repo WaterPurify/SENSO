@@ -10,7 +10,12 @@ from senso.ui import theme
 from senso.ui.views.landing import DESKTOP_WIDTH, example_recipe, landing_view
 
 
-def login_view(page: ft.Page, store: AuthStore, on_login: Callable[[User], None]) -> None:
+def login_view(
+    page: ft.Page,
+    store: AuthStore,
+    on_login: Callable[[User], None],
+    notice: str | None = None,
+) -> None:
     page.clean()
     page.navigation_bar = None
     page.on_resize = None
@@ -45,7 +50,11 @@ def login_view(page: ft.Page, store: AuthStore, on_login: Callable[[User], None]
         title.value = submit.content = "회원가입" if state["signup"] else "로그인"
         switch.content = "이미 계정이 있어요" if state["signup"] else "회원가입"
         password.value = repeat.value = ""
-        message.value = "비밀번호는 12~128자로 입력해 주세요." if state["signup"] else ""
+        message.value = (
+            "비밀번호는 12~128자. 흔한 낱말·1234 같은 이어진 글자는 쓸 수 없어요."
+            if state["signup"]
+            else ""
+        )
         page.update()
 
     def toggle(_) -> None:
@@ -84,7 +93,9 @@ def login_view(page: ft.Page, store: AuthStore, on_login: Callable[[User], None]
             if state["attempts"]:
                 await asyncio.sleep(min(state["attempts"], 5))
             action = store.register if state["signup"] else store.login
-            user = await asyncio.to_thread(action, name, secret)
+            # 접속 주소별 제한에 쓴다 (프록시 뒤라면 프록시 주소가 된다)
+            client = getattr(page, "client_ip", None)
+            user = await asyncio.to_thread(action, name, secret, client)
         except AuthError as e:
             state["attempts"] += 1
             message.value = str(e)
@@ -120,6 +131,8 @@ def login_view(page: ft.Page, store: AuthStore, on_login: Callable[[User], None]
         bgcolor=theme.CREAM,
         actions=[ft.TextButton("로그인", icon=ft.Icons.LOGIN, on_click=open_dialog)],
     )
+    if notice:
+        page.show_dialog(ft.SnackBar(notice))
     page.add(
         ft.SafeArea(
             expand=True,

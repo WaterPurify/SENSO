@@ -18,8 +18,8 @@
 | v2.5 반영 (추가) | ✅ 완료 | 산지 국기 표시, 오늘의 말씀 한 잔. 출시 전에 말씀 본문 원문 대조와 묵상 문장 목회자 검수 필요 |
 | W8 안정화·APK | ⏳ 예정 | |
 
-- 테스트: pytest **208개** 통과, Ruff 검사 통과
-- 데이터 스키마: **v5** (마이그레이션 001–005)
+- 테스트: pytest **231개** 통과, Ruff 검사 통과
+- 데이터 스키마: **v6** (마이그레이션 001–006)
 - 로그인·계정별 데이터 보관과 첫 화면·홈 화면 새 디자인은 [SECURITY_AND_SETUP.md](SECURITY_AND_SETUP.md) 참고
 - 커밋 기록: https://github.com/WaterPurify/SENSO/commits/main
 
@@ -118,7 +118,7 @@ SENSO/app/
   tests/                   # pytest
 ```
 
-### 데이터 모델(스키마 v5)
+### 데이터 모델(스키마 v6)
 - **beans**: id, kind(coffee/tea), name, origin(산지, v4), producer(로스터리 / 브랜드·찻집), produced_on(로스팅 날짜 / 제조일), roast_level(커피), tea_type(차), photo_path, is_sample, deleted_at
 - **brews**: id, bean_id, **bean_snapshot(JSON)**, brewed_at, desired_flavors, hot_or_iced, equipment(JSON), dose_g, water_g, temp_c, grind(문자열), time_s, ice_g, notes, acidity/bitterness/sweetness/body(NULL = 미입력), satisfaction, tasting_notes, next_wish, next_memo(v3), based_on_brew_id, based_on_rec_id, is_sample
 - **recommendations**: id, source_brew_id, changed_field, from_value, to_value_or_direction, reason, method('rule-v1')
@@ -135,6 +135,7 @@ SENSO/app/
 | v3 | 다음에 원하는 맛 메모(next_memo) |
 | v4 | 산지(origin), 앱 설정, 말씀 카드 |
 | v5 | 말씀 카드 다시 고르기 (하루 한 장 제약 제거) |
+| v6 | 말씀 한 잔에 적은 한 줄을 저장하지 않음 (민감정보 최소화) |
 
 ---
 
@@ -228,7 +229,7 @@ SENSO/app/
 - [x] 원두·차 이름 옆에 산지 국기가 표시된다
 - [x] 말씀 한 잔: 켠 사용자만 카드를 받고, 다시 고르거나 노트에 저장할 수 있다
 - [x] 말씀 한 잔: 위기 신호가 있으면 상담 안내가 먼저 나온다
-- [x] pytest가 모두 통과한다 (208개)
+- [x] pytest가 모두 통과한다 (231개)
 - [ ] PC(Windows)와 Android 실기기에서 검증했다 (검증한 기기 기록) — 지금은 Windows 브라우저(웹 모드)에서만 확인
 
 ## 7. 8주 이후(사업계획서 W9–W16)

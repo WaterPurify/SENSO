@@ -119,6 +119,7 @@ def word_pick_view(deps: PickDeps) -> ft.Control:
     note = ft.TextField(
         label="한 줄로 적어도 돼요 (선택)",
         hint_text="예) 내일 발표가 걱정돼요",
+        helper="적은 내용은 저장하지 않아요. 마음을 살피는 데에만 써요.",
         max_length=NOTE_MAX,
     )
 
@@ -399,4 +400,4 @@ def word_me_section(
             "신앙이 궁금하다면", icon=ft.Icons.CHURCH_OUTLINED, on_click=lambda _: on_faith()
         )
     )
-    return section("오늘의 말씀 한 잔", "원하는 분만 켜는 무료 기능 · 하루 1회", items)
+    return section("오늘의 말씀 한 잔", "원하는 분만 켜는 무료 기능", items)
