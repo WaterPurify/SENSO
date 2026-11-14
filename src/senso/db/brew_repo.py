@@ -7,6 +7,7 @@ import json
 import sqlite3
 from datetime import datetime
 
+from senso.domain.bean import BeanKind
 from senso.domain.brew import BeanSnapshot, Brew, BrewDraft, Recipe, Tasting
 
 _COLUMNS = (
@@ -96,17 +97,26 @@ class BrewRepository:
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
 
-    def list(self, limit: int | None = None) -> list[Brew]:
-        """최신순."""
-        sql = f"SELECT {_COLUMNS} FROM brews ORDER BY brewed_at DESC, id DESC"
+    def list(self, limit: int | None = None, *, kind: BeanKind | None = None) -> list[Brew]:
+        """종류별로 필터링한 뒤 최신순으로 개수를 제한한다."""
+        sql = f"SELECT {_COLUMNS} FROM brews"
         params: tuple = ()
+        if kind is not None:
+            sql += " WHERE COALESCE(json_extract(bean_snapshot, '$.kind'), 'coffee') = ?"
+            params = (kind.value,)
+        sql += " ORDER BY brewed_at DESC, id DESC"
         if limit is not None:
             sql += " LIMIT ?"
-            params = (limit,)
+            params += (limit,)
         return [_to_brew(r) for r in self.conn.execute(sql, params).fetchall()]
 
     def count(self) -> int:
         return self.conn.execute("SELECT COUNT(*) FROM brews").fetchone()[0]
+
+    def rated_count(self) -> int:
+        return self.conn.execute(
+            "SELECT COUNT(*) FROM brews WHERE is_sample = 0 AND satisfaction IS NOT NULL"
+        ).fetchone()[0]
 
     def get(self, brew_id: int) -> Brew | None:
         row = self.conn.execute(f"SELECT {_COLUMNS} FROM brews WHERE id = ?", (brew_id,)).fetchone()

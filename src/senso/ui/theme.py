@@ -46,3 +46,4 @@ def apply(page: ft.Page) -> None:
     page.theme = app_theme()
     page.theme_mode = ft.ThemeMode.LIGHT  # 다크 모드는 MVP 이후
     page.bgcolor = IVORY
+    page.horizontal_alignment = ft.CrossAxisAlignment.STRETCH

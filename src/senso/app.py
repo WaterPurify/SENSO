@@ -22,7 +22,7 @@ from senso.db.word_repo import AlreadyToday, WordCard, WordRepository
 from senso.domain.bean import Bean, BeanKind
 from senso.domain.brew import Brew, BrewDraft
 from senso.photos import MAX_INPUT_BYTES, PhotoError, load_photo
-from senso.recommend.apply import draft_from_recommendation
+from senso.recommend.apply import draft_from_brew, draft_from_recommendation
 from senso.recommend.engine import Recommendation, recommend
 from senso.samples import add_samples, remove_samples
 from senso.taste.dna import compute as compute_dna
@@ -36,7 +36,8 @@ from senso.ui.views.bean_list import bean_list_view
 from senso.ui.views.brew_detail import DetailDeps, brew_detail_view
 from senso.ui.views.brew_form import BrewFormDeps, brew_form_view
 from senso.ui.views.compare_view import compare_view
-from senso.ui.views.home import home_view
+from senso.ui.views.home import HomeView, home_view
+from senso.ui.views.landing import DESKTOP_WIDTH
 from senso.ui.views.login import login_view
 from senso.ui.views.me import me_view
 from senso.ui.views.quiz_view import QuizDeps, quiz_view
@@ -169,11 +170,12 @@ def authenticated_main(page: ft.Page, user: User) -> None:
         )
 
     content = ft.Container(padding=ft.Padding.symmetric(horizontal=20, vertical=16))
+    frame = ft.Container(content=content, width=CONTENT_MAX_WIDTH)
     scroller = ft.Column(
         expand=True,
         scroll=ft.ScrollMode.AUTO,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        controls=[ft.Container(content=content, max_width=CONTENT_MAX_WIDTH)],
+        controls=[frame],
     )
 
     attached = {"scroller": False}
@@ -185,14 +187,36 @@ def authenticated_main(page: ft.Page, user: User) -> None:
     def show(control: ft.Control, *, scroll_to_top: bool = True) -> None:
         """화면을 바꾸고, 새 화면은 맨 위에서 시작한다."""
         dispose_view()
+        frame.width = DESKTOP_WIDTH if isinstance(control, HomeView) else CONTENT_MAX_WIDTH
         content.content = control
+        if isinstance(control, HomeView):
+            control.adapt(getattr(page, "width", None) or DESKTOP_WIDTH)
         page.update()
         # scroller는 page.add() 이후에만 화면에 붙어 있다 (그 전에는 .page 접근이 오류)
         if attached["scroller"] and scroll_to_top:
             page.run_task(scroller.scroll_to, offset=0, duration=0)
 
+    def resize_home(_) -> None:
+        if isinstance(content.content, HomeView):
+            content.content.adapt(getattr(page, "width", None) or DESKTOP_WIDTH)
+            page.update()
+
+    page.on_resize = resize_home
+
     # ---- 화면 만들기 ------------------------------------------------------
     home_limit = 20
+    home_kind: BeanKind | None = None
+
+    def filter_home(kind: BeanKind | None) -> None:
+        nonlocal home_kind, home_limit
+        home_kind, home_limit = kind, 20
+        show(build_tab(TAB_HOME))
+
+    def repeat_brew(brew: Brew) -> None:
+        open_brew_form(
+            prefill=draft_from_brew(brew),
+            banner=ft.Text("최근 레시피를 불러왔어요. 맛 평가는 새로 남겨주세요."),
+        )
 
     def more_home() -> None:
         nonlocal home_limit
@@ -200,8 +224,8 @@ def authenticated_main(page: ft.Page, user: User) -> None:
         show(build_tab(TAB_HOME), scroll_to_top=False)
 
     def open_tab(index: int) -> None:
-        nonlocal home_limit
-        home_limit = 20
+        nonlocal home_limit, home_kind
+        home_limit, home_kind = 20, None
         nav.selected_index = index
         show(build_tab(index))
 
@@ -419,13 +443,13 @@ def authenticated_main(page: ft.Page, user: User) -> None:
 
     def build_tab(index: int) -> ft.Control:
         if index == TAB_HOME:
-            all_brews = brews.list(limit=home_limit + 1)
+            all_brews = brews.list(limit=home_limit + 1, kind=home_kind)
             has_more = len(all_brews) > home_limit
             all_brews = all_brews[:home_limit]
             top: list[ft.Control] = [speech_bubble(home_greeting(config.now(), brews.count()))]
             top += word_top()
             bottom: list[ft.Control] = []
-            if not all_brews:
+            if brews.count() == 0:
                 bottom.append(
                     ft.TextButton(
                         "예시 기록으로 둘러보기",
@@ -441,6 +465,7 @@ def authenticated_main(page: ft.Page, user: User) -> None:
                         on_click=lambda _: on_remove_samples(),
                     )
                 )
+            latest = brews.list(limit=1)
             return home_view(
                 all_brews,
                 on_new=open_brew_form,
@@ -449,6 +474,12 @@ def authenticated_main(page: ft.Page, user: User) -> None:
                 top=top,
                 bottom=bottom,
                 on_more=more_home if has_more else None,
+                kind=home_kind,
+                on_filter=filter_home,
+                latest=latest[0] if latest else None,
+                on_repeat=repeat_brew,
+                rated_count=brews.rated_count(),
+                on_taste=lambda: open_tab(TAB_ME),
             )
         if index in TAB_KINDS:
             kind = TAB_KINDS[index]

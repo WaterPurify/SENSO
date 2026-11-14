@@ -6,7 +6,7 @@ from datetime import datetime
 import flet as ft
 
 from senso.domain.bean import BeanKind
-from senso.domain.brew import Brew
+from senso.domain.brew import Brew, format_number, format_time
 from senso.origin import with_flag
 from senso.ui import theme
 
@@ -43,7 +43,13 @@ def brew_card(brew: Brew, on_open: Callable[[Brew], None]) -> ft.Control:
     if brew.iced:
         tags.append(tag("아이스", bgcolor="#E3F0F7", color="#1F5A7A"))
     if brew.based_on_brew_id:
-        tags.append(tag("제안 적용", bgcolor="#E8F0E0", color=theme.TEA_GREEN))
+        tags.append(
+            tag(
+                "제안 적용" if brew.based_on_rec_id else "다시 추출",
+                bgcolor="#E8F0E0",
+                color=theme.TEA_GREEN,
+            )
+        )
     if brew.is_sample:
         tags.append(tag("예시", bgcolor="#EEEEEE", color="#555555"))
 
@@ -82,6 +88,14 @@ def brew_card(brew: Brew, on_open: Callable[[Brew], None]) -> ft.Control:
                                 color=theme.BROWN,
                             ),
                             ft.Text(sub, size=theme.CAPTION_SIZE, color=theme.TEXT_MUTED),
+                            ft.Text(
+                                f"{format_number(brew.recipe.dose_g)}g / "
+                                f"{format_number(brew.recipe.water_g)}g · "
+                                f"{format_number(brew.recipe.temp_c, '°C')} · "
+                                f"{format_time(brew.recipe.time_s)}",
+                                size=13,
+                                color=theme.TEXT_MUTED,
+                            ),
                             ft.Row(spacing=6, wrap=True, controls=tags),
                         ],
                     ),

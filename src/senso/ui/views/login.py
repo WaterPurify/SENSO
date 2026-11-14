@@ -7,11 +7,13 @@ import flet as ft
 
 from senso.auth import AuthError, AuthStore, User
 from senso.ui import theme
+from senso.ui.views.landing import DESKTOP_WIDTH, example_recipe, landing_view
 
 
 def login_view(page: ft.Page, store: AuthStore, on_login: Callable[[User], None]) -> None:
     page.clean()
     page.navigation_bar = None
+    page.on_resize = None
     state = {"alive": True, "signup": False, "busy": False, "attempts": 0}
     username = ft.TextField(label="아이디", max_length=32, autofocus=True)
     password = ft.TextField(
@@ -29,6 +31,7 @@ def login_view(page: ft.Page, store: AuthStore, on_login: Callable[[User], None]
 
     def open_dialog(_) -> None:
         if not state["busy"]:
+            set_mode(False)
             page.show_dialog(dialog)
 
     def cancel(_) -> None:
@@ -36,16 +39,33 @@ def login_view(page: ft.Page, store: AuthStore, on_login: Callable[[User], None]
             password.value = repeat.value = ""
             page.pop_dialog()
 
-    def toggle(_) -> None:
-        if state["busy"]:
-            return
-        state["signup"] = not state["signup"]
+    def set_mode(signup: bool) -> None:
+        state["signup"] = signup
         repeat.visible = state["signup"]
         title.value = submit.content = "회원가입" if state["signup"] else "로그인"
         switch.content = "이미 계정이 있어요" if state["signup"] else "회원가입"
         password.value = repeat.value = ""
         message.value = "비밀번호는 12~128자로 입력해 주세요." if state["signup"] else ""
         page.update()
+
+    def toggle(_) -> None:
+        if not state["busy"]:
+            set_mode(not state["signup"])
+
+    def start_signup() -> None:
+        if not state["busy"]:
+            set_mode(True)
+            page.show_dialog(dialog)
+
+    def show_example() -> None:
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text("이렇게 기록할 수 있어요 · 예시"),
+                content=ft.Container(width=380, content=example_recipe()),
+                actions=[ft.TextButton("닫기", on_click=lambda _: page.pop_dialog())],
+                scrollable=True,
+            )
+        )
 
     async def authenticate(_) -> None:
         if state["busy"] or not state["alive"]:
@@ -102,15 +122,18 @@ def login_view(page: ft.Page, store: AuthStore, on_login: Callable[[User], None]
     )
     page.add(
         ft.SafeArea(
-            content=ft.Container(
-                padding=24,
-                content=ft.Column(
-                    controls=[
-                        ft.Text("나만의 한 잔을 기록해 보세요", size=theme.TITLE_SIZE),
-                        ft.Text("로그인하면 내 커피·차 기록과 사진을 볼 수 있어요."),
-                        ft.Text("처음이라면 오른쪽 위 로그인에서 회원가입을 해 주세요."),
-                    ]
-                ),
-            )
+            expand=True,
+            content=ft.Column(
+                expand=True,
+                scroll=ft.ScrollMode.AUTO,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[
+                    ft.Container(
+                        width=DESKTOP_WIDTH,
+                        padding=24,
+                        content=landing_view(start_signup, show_example),
+                    )
+                ],
+            ),
         )
     )

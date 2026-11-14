@@ -29,3 +29,17 @@ def draft_from_recommendation(brew: Brew, rec: Recommendation, rec_id: int) -> B
         based_on_brew_id=brew.id,
         based_on_rec_id=rec_id,
     )
+
+
+def draft_from_brew(brew: Brew) -> BrewDraft:
+    """레시피만 새 기록에 복사한다. 과거 평가와 추천 ID는 이어받지 않는다."""
+    return BrewDraft(
+        bean_id=brew.bean_id,
+        bean=brew.bean,
+        recipe=brew.recipe,
+        desired_flavors=brew.desired_flavors,
+        iced=brew.iced,
+        dripper=brew.dripper,
+        grinder=brew.grinder,
+        based_on_brew_id=brew.id,
+    )
