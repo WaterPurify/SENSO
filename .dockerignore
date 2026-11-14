@@ -6,3 +6,11 @@ build/
 .pytest_cache/
 .ruff_cache/
 *.md
+# 개인 데이터가 이미지에 들어가지 않게 (src/.data 는 Docker 없이 실행할 때의 기본 데이터 폴더)
+**/.data/
+**/*.db
+**/*.db-journal
+**/*.db-wal
+**/*.db-shm
+.env
+.env.*

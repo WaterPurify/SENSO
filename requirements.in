@@ -1,0 +1,5 @@
+# 운영(배포)용 의존성. 버전을 고정하고, requirements.lock에 해시까지 적어 둔다.
+# 바꾼 뒤에는 PRODUCTION.md의 "의존성 갱신" 명령으로 requirements.lock을 다시 만든다.
+flet[web]==1.1.2
+pillow==13.0.0
+tzdata==2026.6

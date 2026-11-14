@@ -63,6 +63,8 @@
 | 코드 품질 | Ruff(린트·포맷) | VS Code 확장으로 저장할 때 자동 정리 |
 
 ### 개발·실행 방식
+> 실제로 쓰거나 보여 줄 때는 운영용 Docker(`compose.prod.yaml`, http://localhost:8551)를 쓴다. 일반 사용자로 실행, 읽기 전용 파일 시스템, 의존성 해시 고정. 자세한 내용은 [PRODUCTION.md](PRODUCTION.md).
+
 1. 평소 개발은 **Docker 웹 모드**로 한다. 브라우저에서 http://localhost:8550 을 연다.
    ```bash
    docker compose up -d --build app      # 처음 또는 의존성이 바뀌었을 때

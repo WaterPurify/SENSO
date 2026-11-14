@@ -43,6 +43,7 @@ Docker 없이 실행하려면 Python 3.12 가상환경에서 `pip install -r req
 
 - [PROJECT_PLAN.md](PROJECT_PLAN.md): 8주 개발 계획과 진행 상황
 - [SECURITY_AND_SETUP.md](SECURITY_AND_SETUP.md): 로그인, 데이터 보관 위치, 기존 기록 가져오기
+- [PRODUCTION.md](PRODUCTION.md): 운영(배포)용 Docker로 실행하기, 백업, 의존성 갱신
 
 ## 기술
 

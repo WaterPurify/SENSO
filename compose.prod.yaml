@@ -1,0 +1,40 @@
+# SENSO 운영(배포)용 실행 설정. 개발용 compose.yaml과 따로 쓴다.
+#
+#   켜기:  docker compose -f compose.prod.yaml up -d --build   → http://localhost:8551
+#   끄기:  docker compose -f compose.prod.yaml down            (데이터는 senso-prod_data 볼륨에 남음)
+#   상태:  docker compose -f compose.prod.yaml ps
+#
+# 개발용(8550)과 포트·데이터 볼륨이 달라 둘을 함께 켜도 섞이지 않는다.
+
+name: senso-prod
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    image: senso-prod:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8551:8550"   # 이 PC에서만 접속. 밖으로 열 때는 HTTPS 프록시를 앞에 둔다
+    volumes:
+      - data:/data              # DB와 사진. 쓸 수 있는 곳은 여기와 /tmp뿐
+    read_only: true             # 이미지 안의 파일(코드 포함)은 고칠 수 없다
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    user: "10001:10001"
+    cap_drop:
+      - ALL                     # 리눅스 특권 기능을 모두 뺀다
+    security_opt:
+      - no-new-privileges:true  # 실행 중에 권한을 올릴 수 없다
+    pids_limit: 200
+    mem_limit: 768m
+    cpus: 2.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  data:
