@@ -5,6 +5,7 @@ from collections.abc import Callable
 import flet as ft
 
 from senso import config
+from senso.auth import AuthStore, User
 from senso.characters.lines import (
     beans_greeting,
     brew_again_line,
@@ -20,7 +21,7 @@ from senso.db.settings_repo import WORD_ENABLED, SettingsRepository
 from senso.db.word_repo import AlreadyToday, WordCard, WordRepository
 from senso.domain.bean import Bean, BeanKind
 from senso.domain.brew import Brew, BrewDraft
-from senso.photos import load_photo
+from senso.photos import MAX_INPUT_BYTES, PhotoError, load_photo
 from senso.recommend.apply import draft_from_recommendation
 from senso.recommend.engine import Recommendation, recommend
 from senso.samples import add_samples, remove_samples
@@ -36,6 +37,7 @@ from senso.ui.views.brew_detail import DetailDeps, brew_detail_view
 from senso.ui.views.brew_form import BrewFormDeps, brew_form_view
 from senso.ui.views.compare_view import compare_view
 from senso.ui.views.home import home_view
+from senso.ui.views.login import login_view
 from senso.ui.views.me import me_view
 from senso.ui.views.quiz_view import QuizDeps, quiz_view
 from senso.ui.views.recommend_view import RecommendDeps, recommend_view
@@ -67,11 +69,32 @@ def main(page: ft.Page) -> None:
     page.title = "SENSO"
     theme.apply(page)
 
-    # 웹 모드에서는 브라우저 탭마다 main()이 따로 실행되므로 연결도 탭마다 연다.
-    conn = open_database(config.db_path())
+    store = AuthStore(config.data_dir())
+    login_view(page, store, lambda user: authenticated_main(page, user))
+
+
+def authenticated_main(page: ft.Page, user: User) -> None:
+    directory = user.directory(config.data_dir())
+    # 로그인 성공 후에만 해당 계정의 저장소를 연다.
+    conn = open_database(directory / config.DB_FILENAME)
+
     # on_disconnect는 새로고침 등으로 잠깐 끊겨도 불리고 세션은 다시 이어지므로,
     # 세션이 완전히 끝날 때(on_close)만 연결을 닫는다.
-    page.on_close = lambda _: conn.close()
+    def close_session(_) -> None:
+        dispose_view()
+        conn.close()
+
+    def logout(_) -> None:
+        close_session(None)
+        main(page)
+
+    page.on_close = close_session
+    page.clean()
+    page.appbar = ft.AppBar(
+        title=ft.Text("SENSO"),
+        bgcolor=theme.CREAM,
+        actions=[ft.Text(user.username), ft.TextButton("로그아웃", on_click=logout)],
+    )
     version = schema_version(conn)
     beans = BeanRepository(conn)
     brews = BrewRepository(conn)
@@ -79,7 +102,8 @@ def main(page: ft.Page) -> None:
     quizzes = QuizRepository(conn)
     settings = SettingsRepository(conn)
     words = WordRepository(conn)
-    photo_dir = config.photos_dir()
+    photo_dir = directory / "photos"
+    photo_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     picker = ft.FilePicker()  # 페이지에 서비스로 등록된다
 
@@ -92,11 +116,13 @@ def main(page: ft.Page) -> None:
         if not files:
             return None
         f = files[0]
+        if f.size > MAX_INPUT_BYTES:
+            raise PhotoError("사진이 너무 커요 (20MB 이하)")
         if f.bytes:
             return f.bytes
-        if f.path:  # 데스크톱 실행
+        if f.path and not page.web:  # 웹 클라이언트의 경로로 서버 파일을 읽지 않는다
             with open(f.path, "rb") as fh:
-                return fh.read()
+                return fh.read(MAX_INPUT_BYTES + 1)
         return None
 
     async def save_png(data: bytes, file_name: str) -> None:
@@ -152,16 +178,30 @@ def main(page: ft.Page) -> None:
 
     attached = {"scroller": False}
 
-    def show(control: ft.Control) -> None:
+    def dispose_view() -> None:
+        if hasattr(content.content, "dispose"):
+            content.content.dispose()
+
+    def show(control: ft.Control, *, scroll_to_top: bool = True) -> None:
         """화면을 바꾸고, 새 화면은 맨 위에서 시작한다."""
+        dispose_view()
         content.content = control
         page.update()
         # scroller는 page.add() 이후에만 화면에 붙어 있다 (그 전에는 .page 접근이 오류)
-        if attached["scroller"]:
+        if attached["scroller"] and scroll_to_top:
             page.run_task(scroller.scroll_to, offset=0, duration=0)
 
     # ---- 화면 만들기 ------------------------------------------------------
+    home_limit = 20
+
+    def more_home() -> None:
+        nonlocal home_limit
+        home_limit += 20
+        show(build_tab(TAB_HOME), scroll_to_top=False)
+
     def open_tab(index: int) -> None:
+        nonlocal home_limit
+        home_limit = 20
         nav.selected_index = index
         show(build_tab(index))
 
@@ -379,8 +419,10 @@ def main(page: ft.Page) -> None:
 
     def build_tab(index: int) -> ft.Control:
         if index == TAB_HOME:
-            all_brews = brews.list()
-            top: list[ft.Control] = [speech_bubble(home_greeting(config.now(), len(all_brews)))]
+            all_brews = brews.list(limit=home_limit + 1)
+            has_more = len(all_brews) > home_limit
+            all_brews = all_brews[:home_limit]
+            top: list[ft.Control] = [speech_bubble(home_greeting(config.now(), brews.count()))]
             top += word_top()
             bottom: list[ft.Control] = []
             if not all_brews:
@@ -406,6 +448,7 @@ def main(page: ft.Page) -> None:
                 on_open=lambda b: open_brew_detail(b.id),
                 top=top,
                 bottom=bottom,
+                on_more=more_home if has_more else None,
             )
         if index in TAB_KINDS:
             kind = TAB_KINDS[index]

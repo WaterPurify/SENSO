@@ -18,6 +18,7 @@ def home_view(
     on_open: Callable[[Brew], None],
     top: list[ft.Control] | None = None,
     bottom: list[ft.Control] | None = None,
+    on_more: Callable[[], None] | None = None,
 ) -> ft.Control:
     controls: list[ft.Control] = [
         header("SENSO", "Sen & So와 함께 찾는 나만의 한 잔"),
@@ -56,5 +57,7 @@ def home_view(
                 "Sen이 다음 레시피를 함께 고민해 줄게요.",
             )
         )
+    if on_more is not None:
+        controls.append(ft.TextButton("더 보기", on_click=lambda _: on_more()))
     controls += bottom or []
     return ft.Column(spacing=12, controls=controls)

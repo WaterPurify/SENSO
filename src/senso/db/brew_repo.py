@@ -105,6 +105,9 @@ class BrewRepository:
             params = (limit,)
         return [_to_brew(r) for r in self.conn.execute(sql, params).fetchall()]
 
+    def count(self) -> int:
+        return self.conn.execute("SELECT COUNT(*) FROM brews").fetchone()[0]
+
     def get(self, brew_id: int) -> Brew | None:
         row = self.conn.execute(f"SELECT {_COLUMNS} FROM brews WHERE id = ?", (brew_id,)).fetchone()
         return _to_brew(row) if row else None

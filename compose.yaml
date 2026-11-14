@@ -9,7 +9,7 @@ services:
     image: senso-dev
     restart: unless-stopped     # Docker Desktop을 다시 켜면 앱도 자동으로 다시 뜸
     ports:
-      - "8550:8550"
+      - "127.0.0.1:8550:8550"
     volumes:
       - .:/app                  # 코드를 고치면 컨테이너에 바로 반영
       - senso-data:/data        # DB와 사진 (OneDrive 폴더 밖에 보관)

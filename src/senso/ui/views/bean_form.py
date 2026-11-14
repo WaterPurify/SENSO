@@ -20,7 +20,7 @@ from senso.domain.bean import (
     validate_bean,
 )
 from senso.origin import country_of
-from senso.photos import PhotoError, delete_photo, load_photo, save_photo
+from senso.photos import PhotoError, delete_photo, load_photo, prepare_photo, save_prepared_photo
 from senso.text import josa, quote
 from senso.ui import theme
 
@@ -37,19 +37,33 @@ class FormDeps:
     close: Callable[[], None]  # 목록으로 돌아가기
 
 
+class BeanForm(ft.Column):
+    """탭 이동·로그아웃·세션 종료 때 미저장 사진을 해제한다."""
+
+    discard: Callable[[], None]
+
+    def dispose(self) -> None:
+        self.discard()
+
+    def will_unmount(self) -> None:
+        self.dispose()
+
+
 def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Control:
     labels = LABELS[kind]
     editing = bean is not None
 
-    # ---- 사진 상태 ------------------------------------------------------
-    # original: 저장되어 있던 사진, current: 지금 화면에 보이는 사진.
-    # 저장하지 않고 나가면 새로 고른 사진 파일은 지운다.
+    # 미저장 사진은 축소한 바이트만 보관한다. DB 저장 전 파일은 만들지 않는다.
     original_photo = bean.photo_path if bean else None
-    state = {"current": original_photo}
+    state = {"current": original_photo, "pending": None, "closed": False}
 
     def discard_unsaved_photo() -> None:
-        if state["current"] and state["current"] != original_photo:
-            delete_photo(state["current"], deps.photo_dir)
+        state["pending"] = None
+
+    def dispose() -> None:
+        state["closed"] = True
+        discard_unsaved_photo()
+        photo_box.content = None
 
     photo_box = ft.Container(
         width=120, height=120, border_radius=16, bgcolor=theme.CREAM, alignment=ft.Alignment.CENTER
@@ -58,7 +72,9 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
     pick_photo_btn = ft.OutlinedButton("사진 고르기", icon=ft.Icons.ADD_A_PHOTO_OUTLINED)
 
     def render_photo() -> None:
-        data = load_photo(state["current"], deps.photo_dir) if state["current"] else None
+        data = state["pending"] or (
+            load_photo(state["current"], deps.photo_dir) if state["current"] else None
+        )
         if data:
             photo_box.content = ft.Image(
                 src=data, width=120, height=120, fit=ft.BoxFit.COVER, border_radius=16
@@ -71,19 +87,25 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
     async def on_pick_photo(_: ft.Event) -> None:
         try:
             data = await deps.pick_image()
+        except PhotoError as e:
+            if not state["closed"]:
+                deps.notify(str(e))
+            return
         except Exception:
             # 권한 거부 등: 사진 없이도 등록할 수 있게 안내만 한다
-            deps.notify("사진을 가져오지 못했어요. 사진 없이도 등록할 수 있어요.")
+            if not state["closed"]:
+                deps.notify("사진을 가져오지 못했어요. 사진 없이도 등록할 수 있어요.")
             return
-        if data is None:
+        if data is None or state["closed"]:
             return
         try:
-            name = save_photo(data, deps.photo_dir)
+            prepared = prepare_photo(data)
         except PhotoError as e:
             deps.notify(str(e))
             return
         discard_unsaved_photo()
-        state["current"] = name
+        state["current"] = None
+        state["pending"] = prepared
         render_photo()
         photo_box.update()
         pick_photo_btn.update()
@@ -194,14 +216,27 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
             form.update()
             deps.notify("입력을 확인해 주세요.")
             return
-        if bean is None:
-            deps.repo.create(draft, photo_path=state["current"])
-            deps.notify(f"{josa(quote(draft.name), '을')} 등록했어요.")
-        else:
-            deps.repo.update(bean.id, draft, photo_path=state["current"])
-            if original_photo and original_photo != state["current"]:
-                delete_photo(original_photo, deps.photo_dir)
-            deps.notify("저장했어요.")
+        if state["closed"]:
+            return
+        new_photo = None
+        try:
+            if state["pending"]:
+                new_photo = save_prepared_photo(state["pending"], deps.photo_dir)
+            photo = new_photo or state["current"]
+            if bean is None:
+                deps.repo.create(draft, photo_path=photo)
+            else:
+                deps.repo.update(bean.id, draft, photo_path=photo)
+        except Exception:
+            if new_photo:
+                delete_photo(new_photo, deps.photo_dir)
+            deps.notify("저장하지 못했어요. 다시 시도해 주세요.")
+            return
+        # DB 저장에 성공한 뒤에만 기존 사진을 지운다.
+        if original_photo and original_photo != photo:
+            delete_photo(original_photo, deps.photo_dir)
+        discard_unsaved_photo()
+        deps.notify(f"{josa(quote(draft.name), '을')} 저장했어요.")
         deps.close()
 
     def on_cancel(_: ft.Event) -> None:
@@ -229,7 +264,7 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
     actions: list[ft.Control] = [
         ft.FilledButton("저장", icon=ft.Icons.CHECK, height=48, expand=True, on_click=on_save),
     ]
-    form = ft.Column(
+    form = BeanForm(
         spacing=theme.SPACING,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,  # 입력 칸을 가로로 꽉 채움
         controls=[
@@ -267,4 +302,5 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
                 on_click=on_delete,
             )
         )
+    form.discard = dispose
     return form

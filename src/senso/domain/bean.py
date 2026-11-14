@@ -48,7 +48,7 @@ class KindLabels:
 
 
 LABELS: dict[BeanKind, KindLabels] = {
-    BeanKind.COFFEE: KindLabels("커피", "원두", "로스터리", "로스팅 날짜"),
+    BeanKind.COFFEE: KindLabels("커피", "원두", "로스터리", "로스팅된 날짜"),
     BeanKind.TEA: KindLabels("차", "차", "브랜드·찻집", "제조일"),
 }
 
