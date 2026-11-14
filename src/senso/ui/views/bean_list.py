@@ -5,10 +5,10 @@ from collections.abc import Callable
 import flet as ft
 
 from senso.domain.bean import LABELS, ROAST_LEVELS, TEA_TYPES, Bean, BeanKind
-from senso.origin import with_flag
 from senso.text import josa
 from senso.ui import theme
 from senso.ui.components.empty_state import empty_state
+from senso.ui.components.flag import flagged_name
 from senso.ui.components.header import header
 
 KIND_ICONS = {
@@ -72,8 +72,9 @@ def bean_card(bean: Bean, photo: bytes | None, on_open: Callable[[Bean], None]) 
                         spacing=2,
                         expand=True,
                         controls=[
-                            ft.Text(
-                                with_flag(bean.name, bean.origin),
+                            flagged_name(
+                                bean.name,
+                                bean.origin,
                                 size=theme.BODY_SIZE + 1,
                                 weight=ft.FontWeight.BOLD,
                                 color=theme.BROWN,

@@ -66,7 +66,9 @@ def quiz_view(deps: QuizDeps) -> ft.Control:
                     style=ft.ButtonStyle(
                         bgcolor="#FFFFFF",
                         shape=ft.RoundedRectangleBorder(radius=14),
-                        text_style=ft.TextStyle(size=theme.BODY_SIZE),
+                        text_style=ft.TextStyle(
+                            size=theme.BODY_SIZE, font_family=theme.FONT_FAMILY
+                        ),
                     ),
                     on_click=lambda _, i=i: choose(i),
                 )

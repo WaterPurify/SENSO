@@ -18,8 +18,9 @@
 | v2.5 반영 (추가) | ✅ 완료 | 산지 국기 표시, 오늘의 말씀 한 잔. 출시 전에 말씀 본문 원문 대조와 묵상 문장 목회자 검수 필요 |
 | W8 안정화·APK | ⏳ 예정 | |
 
-- 테스트: pytest **186개** 통과, Ruff 검사 통과
-- 데이터 스키마: **v4** (마이그레이션 001–004)
+- 테스트: pytest **208개** 통과, Ruff 검사 통과
+- 데이터 스키마: **v5** (마이그레이션 001–005)
+- 로그인·계정별 데이터 보관과 첫 화면·홈 화면 새 디자인은 [SECURITY_AND_SETUP.md](SECURITY_AND_SETUP.md) 참고
 - 커밋 기록: https://github.com/WaterPurify/SENSO/commits/main
 
 ---
@@ -38,7 +39,7 @@
 | Taste DNA v0 | 기록에서 산미·단맛·쓴맛·바디 선호를 계산해 근거 기록과 함께 표시 | SENSO 3-2 ③ | ✅ |
 | Sen & So 대화 UI | 추천·안내 문구를 캐릭터 말풍선으로 표시. AI가 아니라 템플릿 문구 | SENSO 3-1 | ✅ |
 | 카페인 마감 안내 | 오후 3시 이후 앱을 열면 So가 카페인을 챙겨 줌. 앱 안에서만 표시. 시간 설정은 아직 없음 | SENSO 3-2 (선택) | ✅ (고정 시간) |
-| 오늘의 말씀 한 잔 | 원하는 사람만 켜는 무료 기능. 하루 1회 기분 8가지 중 하나를 고르면 어울리는 한 잔, 성경 말씀(개역한글), 묵상 한 줄 카드. 말씀 노트, 카드 이미지 저장, 위기 신호 시 상담 안내 | SENSO v2.5 3-4 | ✅ |
+| 오늘의 말씀 한 잔 | 원하는 사람만 켜는 무료 기능. 기분 8가지 중 하나를 고르면(마음이 바뀌면 다시 고를 수 있음) 어울리는 한 잔, 성경 말씀(개역한글), 묵상 한 줄 카드. 말씀 노트, 카드 이미지 저장, 위기 신호 시 상담 안내 | SENSO v2.5 3-4 | ✅ |
 
 ### 이번 8주에 만들지 않는 것
 회원가입·로그인, 서버, Plus·Premium 결제, 테이스팅 박스 주문, 외부 AI API, 음악·워치 연동, 커뮤니티, 영어 버전, 앱 밖으로 보내는 푸시 알림(말씀 카드 알림 시간 포함), 카카오톡·인스타그램 바로 공유(지금은 이미지 저장만), 성경 본문 전체 읽기, iOS 빌드.
@@ -55,7 +56,7 @@
 | 저장소 | 내장 `sqlite3` + 저장소 클래스(repository) | 추가 설치가 없고 원두·기록·추천의 관계를 다루기 좋다. 번호 붙은 SQL 파일로 스키마를 올린다(`PRAGMA user_version`) |
 | 사진 | Flet `FilePicker` + Pillow | 고른 사진을 긴 변 1280px JPEG로 줄여 앱 데이터 폴더에 저장한다. 사진 없이도 등록할 수 있다 |
 | 카드 이미지 | Pillow + Pretendard 글꼴 | 취향 유형 카드와 말씀 카드를 1080×1920(인스타 스토리 크기) PNG로 만든다 |
-| 국기 | 국기 이모지 | 이미지 파일 없이 나라 코드로 그린다. 웹에서는 처음 몇 초 뒤 이모지 글꼴을 받아 와 표시된다 |
+| 국기 | Pillow로 직접 그린 PNG (`senso/flags.py`) | 웹 서버가 인터넷 글꼴을 쓰지 않으므로(no_cdn) 이모지 대신 37개 나라 국기를 앱이 그린다 |
 | 글꼴 | Pretendard (SIL OFL 1.1) | 앱 안(`src/assets/fonts`)에 넣어 인터넷 없이도 한글이 보인다 |
 | 데이터 검증 | `dataclasses` + 직접 만든 검증 함수 | 의존성을 적게 유지 |
 | 테스트 | pytest | 추천 엔진·Taste DNA·말씀 데이터를 화면 없이 검증 |
@@ -97,31 +98,33 @@ SENSO/app/
       app.py               # 조립: 탭 4개, 화면 이동, DB와 화면 연결
       config.py            # 데이터 폴더, 시간대(Asia/Seoul)
       domain/              # 모델과 입력 검증: bean.py(원두·차), brew.py(기록·레시피·시음)
-      db/                  # database.py, migrations/001–004.sql, 저장소(bean·brew·recommendation·quiz·settings·word)
+      db/                  # database.py, migrations/001–005.sql, 저장소(bean·brew·recommendation·quiz·settings·word)
       recommend/           # 규칙 기반 추천 엔진(engine.py), 추천을 새 기록 초안으로(apply.py)
       taste/               # 취향 테스트(quiz.py), Taste DNA(dna.py), 결과 카드(card.py)
       word/                # 오늘의 말씀 한 잔: 기분·말씀·묵상 데이터(moods.py), 말씀 카드(card.py)
       characters/          # Sen & So 대사 템플릿(lines.py)
-      origin.py            # 산지 → 나라 → 국기
+      origin.py            # 산지 → 나라
+      flags.py             # 나라 → 국기 그림(PNG)
+      auth.py              # 로그인·계정별 데이터 폴더
       text.py              # 한국어 조사(을/를, 이/가 ...)
       photos.py            # 사진 저장·불러오기
       samples.py           # 예시 데이터 넣기·지우기
       ui/
         theme.py           # 아이보리·브라운 색상, 글자 크기, 글꼴
         components/        # 기록 카드, 1–5점 입력, 칩 선택, 말풍선, 비교표, 빈 상태
-        views/             # home, bean_list, bean_form, brew_form, brew_detail, recommend_view,
+        views/             # landing, login, home, bean_list, bean_form, brew_form, brew_detail, recommend_view,
                            # compare_view, quiz_view, me, word_view
     assets/                # characters/(sen·so·duo.png), fonts/(Pretendard)
   tests/                   # pytest
 ```
 
-### 데이터 모델(스키마 v4)
+### 데이터 모델(스키마 v5)
 - **beans**: id, kind(coffee/tea), name, origin(산지, v4), producer(로스터리 / 브랜드·찻집), produced_on(로스팅 날짜 / 제조일), roast_level(커피), tea_type(차), photo_path, is_sample, deleted_at
 - **brews**: id, bean_id, **bean_snapshot(JSON)**, brewed_at, desired_flavors, hot_or_iced, equipment(JSON), dose_g, water_g, temp_c, grind(문자열), time_s, ice_g, notes, acidity/bitterness/sweetness/body(NULL = 미입력), satisfaction, tasting_notes, next_wish, next_memo(v3), based_on_brew_id, based_on_rec_id, is_sample
 - **recommendations**: id, source_brew_id, changed_field, from_value, to_value_or_direction, reason, method('rule-v1')
 - **quiz_results**: id, taken_at, answers(JSON), type_code
 - **app_settings** (v4): key, value. 예: `word_enabled` = '1' 켬 / '0' 끔 / 없음 = 아직 고르지 않음
-- **word_cards** (v4): id, day(하루 한 장, UNIQUE), mood, verse_ref, note, saved(말씀 노트), created_at
+- **word_cards** (v4, v5에서 하루 여러 장 허용): id, day, mood, verse_ref, note, saved(말씀 노트), created_at
 
 > 원두는 삭제할 때 실제로 지우지 않고 삭제 표시만 한다(소프트 삭제). 기록에는 원두 정보 사본(스냅샷, 산지 포함)을 저장해서, 원두를 지우거나 고쳐도 과거 기록이 바뀌지 않게 한다.
 
@@ -131,6 +134,7 @@ SENSO/app/
 | v2 | 커피와 차를 함께 담도록 원두 항목 이름 정리, 차 종류 추가 |
 | v3 | 다음에 원하는 맛 메모(next_memo) |
 | v4 | 산지(origin), 앱 설정, 말씀 카드 |
+| v5 | 말씀 카드 다시 고르기 (하루 한 장 제약 제거) |
 
 ---
 
@@ -145,7 +149,7 @@ SENSO/app/
 | **W5** | 규칙 기반 추천 | `recommend/` 엔진: "다음에 원하는 맛"을 먼저 반영, 한 조건만 변경, "조금 더 곱게"처럼 방향으로 표현, 정보가 부족하거나 바람이 충돌하면 추천 보류 | 테스트 20개 이상 통과(33개), 상세 화면에서 "다음 레시피 보기"가 동작 | ✅ |
 | **W6** | 추천에서 새 기록 + Sen & So | 기존·제안 레시피 비교 화면, "이 레시피로 새 기록"(연결 정보 저장, 평가는 복사하지 않음), 캐릭터 말풍선과 대사 템플릿 | 추천으로 만든 기록이 원래 기록과 연결되어 비교할 수 있음 | ✅ |
 | **W7** | 취향 테스트 + Taste DNA | 12문항 테스트와 8유형 결과 화면, Pillow로 카드 PNG 저장, 기록 기반 Taste DNA v0(근거 기록 표시), 카페인 마감 안내 | 테스트 결과 카드를 저장할 수 있고, 기록이 5개 이상이면 DNA가 표시됨 | ✅ |
-| **v2.5** | 사업계획서 v2.5 반영 | 산지 칸과 국기, 오늘의 말씀 한 잔(켜기/끄기, 하루 1장, 기분 8가지, 말씀 노트, 카드 PNG, 위기 안내, 신앙 소개) | 켠 사용자만 하루 한 장의 카드를 받고, 노트에 저장할 수 있음 | ✅ |
+| **v2.5** | 사업계획서 v2.5 반영 | 산지 칸과 국기, 오늘의 말씀 한 잔(켜기/끄기, 다시 고르기, 기분 8가지, 말씀 노트, 카드 PNG, 위기 안내, 신앙 소개) | 켠 사용자만 카드를 받고, 다시 고르거나 노트에 저장할 수 있음 | ✅ |
 | **W8** | 안정화·배포 준비 | Flutter SDK 설치 후 `flet build apk`, Android 실기기 점검, 예외 상황(빈 값·잘못된 숫자·사진 거부) 처리, README에 실행 방법과 미구현 목록 작성 | 설치 가능한 APK와 완료 기준 점검표 | ⏳ |
 
 ### 일정 여유
@@ -178,7 +182,7 @@ SENSO/app/
 ### 사용자 흐름
 1. 처음 한 번 홈에서 기능을 소개하고, 켤지 묻는다. "나" 탭에서 언제든 켜고 끌 수 있다. 끈 사용자도 커피·차 기능은 그대로 쓸 수 있다.
 2. 켠 사용자에게 홈에서 So가 "오늘 마음은 어때요?"라고 묻는다. 기분 8가지 중 하나를 고르고, 원하면 한 줄을 적는다.
-3. 어울리는 한 잔, 개역한글 말씀 한 구절, 묵상 한 줄이 담긴 카드를 보여 준다. 하루에 한 장만 받고, 같은 날 다시 열면 그 카드를 보여 준다.
+3. 어울리는 한 잔, 개역한글 말씀 한 구절, 묵상 한 줄이 담긴 카드를 보여 준다. "마음 다시 고르기"로 언제든 다시 고를 수 있고, 그날의 카드는 마지막에 고른 것이다(사업계획서의 '하루 1회'는 사용자 요청으로 바꿈).
 4. 카드를 말씀 노트에 저장하거나(저장한 카드는 "나" 탭에 모임) 이미지(PNG)로 저장할 수 있다. "신앙이 궁금하다면" 소개 페이지로 갈 수 있다.
 
 | 기분 | 함께 건네는 한 잔 | 말씀 |
@@ -195,7 +199,7 @@ SENSO/app/
 ### 운영 원칙을 코드에 반영한 방식
 | 원칙 | 구현 |
 |---|---|
-| ① 원하는 사람만 켜는 기능 | `app_settings.word_enabled`. 처음 한 번 소개 후 사용자가 선택, 하루 1장(`word_cards.day` UNIQUE) |
+| ① 원하는 사람만 켜는 기능 | `app_settings.word_enabled`. 처음 한 번 소개 후 사용자가 선택. 홈에는 그날 마지막 카드만 보임 |
 | ② 말씀은 원문 그대로 | 앱은 미리 넣어 둔 구절 중에서 고르기만 한다. 본문을 만들거나 고치지 않는다 |
 | ③ 무료 | 결제·광고 없음 |
 | ④ 위기 상황 대응 | 적은 한 줄에 위기 신호("죽고 싶" 등)가 있으면 말씀보다 109·1577-0199·119/112 안내를 먼저 보여 준다. 모든 카드에 "말씀이 상담을 대신하지 않는다"는 문구 |
@@ -222,9 +226,9 @@ SENSO/app/
 - [ ] 취향 유형 테스트 결과 카드를 이미지로 저장할 수 있다 — 카드 PNG 생성은 확인. 저장 버튼은 직접 눌러 보지 못함
 - [x] Taste DNA가 근거 기록과 함께 표시된다
 - [x] 원두·차 이름 옆에 산지 국기가 표시된다
-- [x] 말씀 한 잔: 켠 사용자만 하루 한 장을 받고, 노트에 저장할 수 있다
+- [x] 말씀 한 잔: 켠 사용자만 카드를 받고, 다시 고르거나 노트에 저장할 수 있다
 - [x] 말씀 한 잔: 위기 신호가 있으면 상담 안내가 먼저 나온다
-- [x] pytest가 모두 통과한다 (186개)
+- [x] pytest가 모두 통과한다 (208개)
 - [ ] PC(Windows)와 Android 실기기에서 검증했다 (검증한 기기 기록) — 지금은 Windows 브라우저(웹 모드)에서만 확인
 
 ## 7. 8주 이후(사업계획서 W9–W16)

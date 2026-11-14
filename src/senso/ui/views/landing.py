@@ -13,6 +13,36 @@ def eyebrow(text: str) -> ft.Text:
     return ft.Text(text, size=11, color=theme.TEXT_MUTED)
 
 
+def brand() -> ft.Control:
+    """첫 화면 맨 위: Sen & So 그림과 SENSO 로고 글자."""
+    return ft.Row(
+        spacing=16,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=[
+            ft.Image(
+                src="characters/duo.png",
+                height=96,
+                width=120,
+                fit=ft.BoxFit.CONTAIN,
+                error_content=ft.Icon(ft.Icons.LOCAL_CAFE, color=theme.BROWN, size=48),
+            ),
+            ft.Column(
+                spacing=2,
+                controls=[
+                    ft.Text(
+                        "SENSO",
+                        size=44,
+                        weight=ft.FontWeight.BOLD,
+                        color=theme.BROWN,
+                        style=ft.TextStyle(letter_spacing=4, font_family=theme.FONT_FAMILY),
+                    ),
+                    ft.Text("Sen & So · 커피와 차 한 잔의 기록", size=13, color=theme.TEXT_MUTED),
+                ],
+            ),
+        ],
+    )
+
+
 def example_recipe() -> ft.Control:
     values = ft.ResponsiveRow(
         columns=4,
@@ -65,6 +95,7 @@ def landing_view(on_signup: Callable[[], None], on_example: Callable[[], None]) 
         col={"xs": 12, "md": 6},
         spacing=22,
         controls=[
+            brand(),
             eyebrow("A LITTLE RITUAL, EVERY DAY"),
             ft.Text(
                 "오늘의 한 잔이,\n내일의 취향이 되도록.",

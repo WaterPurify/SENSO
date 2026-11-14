@@ -23,6 +23,7 @@ from senso.origin import country_of
 from senso.photos import PhotoError, delete_photo, load_photo, prepare_photo, save_prepared_photo
 from senso.text import josa, quote
 from senso.ui import theme
+from senso.ui.components.flag import flag_image
 
 PickImage = Callable[[], Awaitable[bytes | None]]
 
@@ -137,14 +138,17 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
         value=(bean.origin or "") if bean else "",
         max_length=ORIGIN_MAX,
     )
-    flag_hint = ft.Text(size=theme.CAPTION_SIZE, color=theme.TEXT_MUTED)
+    flag_text = ft.Text(size=theme.CAPTION_SIZE, color=theme.TEXT_MUTED)
+    flag_hint = ft.Row(spacing=8, controls=[flag_text])
 
     def render_flag() -> None:
         country = country_of(origin.value, name.value)
+        image = flag_image(country, height=16) if country else None
         if country:
-            flag_hint.value = f"{country.flag} {country.name} 국기가 함께 표시돼요"
+            flag_text.value = f"{country.name} 국기가 함께 표시돼요"
         else:
-            flag_hint.value = "산지를 적으면 그 나라 국기가 함께 표시돼요"
+            flag_text.value = "산지를 적으면 그 나라 국기가 함께 표시돼요"
+        flag_hint.controls = [image, flag_text] if image else [flag_text]
 
     render_flag()
     producer = ft.TextField(

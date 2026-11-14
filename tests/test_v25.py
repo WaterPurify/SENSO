@@ -8,9 +8,9 @@ from PIL import Image
 
 from senso.db.bean_repo import BeanRepository
 from senso.db.brew_repo import BrewRepository
-from senso.db.database import open_database
+from senso.db.database import migrate, open_database
 from senso.db.settings_repo import WORD_ENABLED, SettingsRepository
-from senso.db.word_repo import AlreadyToday, WordRepository
+from senso.db.word_repo import WordRepository
 from senso.domain.bean import BeanKind, BeanValidationError, validate_bean
 from senso.domain.brew import BeanSnapshot
 from senso.origin import country_of, find_country, with_flag
@@ -147,17 +147,47 @@ def test_setting_three_states(conn):
     assert settings.get_flag(WORD_ENABLED) is False
 
 
-def test_one_card_per_day(conn):
+def test_repick_same_day(conn):
+    """같은 날 다시 고르면 새 카드가 그날의 카드가 되고, 앞 카드는 남는다."""
     words = WordRepository(conn)
     day = NOW.date()
     assert words.for_day(day) is None
-    card = words.create(day, "tired", "마태복음 11:28", "  ", NOW)
-    assert card.note is None and not card.saved
-    assert words.for_day(day) == card
-    with pytest.raises(AlreadyToday):
-        words.create(day, "joyful", "데살로니가전서 5:16-18", None, NOW)
+    first = words.create(day, "tired", "마태복음 11:28", "  ", NOW)
+    assert first.note is None and not first.saved
+    assert words.for_day(day) == first
+    words.set_saved(first.id, True)
+    again = words.create(day, "joyful", "데살로니가전서 5:16-18", None, NOW)
+    assert words.for_day(day) == again
+    assert [c.id for c in words.saved()] == [first.id]  # 노트에 저장한 앞 카드는 그대로
     nxt = words.create(date(2026, 11, 15), "joyful", "데살로니가전서 5:16-18", "좋은 날", NOW)
     assert nxt.note == "좋은 날"
+    assert words.for_day(day) == again
+
+
+def test_v4_cards_survive_v5_migration(tmp_path):
+    """v4(하루 한 장 제약)에서 쓰던 카드가 v5로 올라가도 남아 있다."""
+    import shutil
+
+    from senso.db.database import MIGRATIONS_DIR, available_migrations, connect
+
+    old = tmp_path / "v4"
+    old.mkdir()
+    for version, path in available_migrations():
+        if version <= 4:
+            shutil.copy(path, old / path.name)
+    c = connect(tmp_path / "old.db")
+    assert migrate(c, old) == 4
+    c.execute(
+        "INSERT INTO word_cards (day, mood, verse_ref, saved, created_at) "
+        "VALUES ('2026-11-13', 'tired', '마태복음 11:28', 1, '2026-11-13T08:00')"
+    )
+    c.commit()
+    assert migrate(c, MIGRATIONS_DIR) == 5
+    words = WordRepository(c)
+    assert [w.verse_ref for w in words.saved()] == ["마태복음 11:28"]
+    words.create(date(2026, 11, 13), "peace", "민수기 6:24-26", None, NOW)  # 이제 같은 날 또 가능
+    assert words.for_day(date(2026, 11, 13)).mood == "peace"
+    c.close()
 
 
 def test_word_note(conn):
@@ -179,3 +209,18 @@ def test_word_card_png(key):
     with Image.open(io.BytesIO(png)) as img:
         assert img.format == "PNG"
         assert img.size == (1080, 1920)
+
+
+# ---- 국기 그림 ---------------------------------------------------------------------
+
+
+def test_every_country_has_a_flag_image():
+    from senso.flags import OUT, flag_png
+    from senso.origin import COUNTRIES
+
+    for code in COUNTRIES:
+        png = flag_png(code)
+        assert png, code
+        with Image.open(io.BytesIO(png)) as img:
+            assert img.size == OUT
+    assert flag_png("ZZ") is None

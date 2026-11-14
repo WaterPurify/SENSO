@@ -84,11 +84,24 @@ def word_home(today: WordCard | None, on_pick: Callable[[], None], on_open) -> f
                 ),
             ],
         )
-    return ft.OutlinedButton(
-        "오늘의 말씀 다시 보기",
-        icon=ft.Icons.MENU_BOOK_OUTLINED,
-        height=44,
-        on_click=lambda _: on_open(today),
+    return ft.Row(
+        wrap=True,
+        spacing=8,
+        run_spacing=8,
+        controls=[
+            ft.OutlinedButton(
+                "오늘의 말씀 다시 보기",
+                icon=ft.Icons.MENU_BOOK_OUTLINED,
+                height=44,
+                on_click=lambda _: on_open(today),
+            ),
+            ft.TextButton(
+                "마음 다시 고르기",
+                icon=ft.Icons.REFRESH,
+                height=44,
+                on_click=lambda _: on_pick(),
+            ),
+        ],
     )
 
 
@@ -127,15 +140,15 @@ def word_pick_view(deps: PickDeps) -> ft.Control:
                     style=ft.ButtonStyle(
                         bgcolor="#FFFFFF",
                         shape=ft.RoundedRectangleBorder(radius=14),
-                        text_style=ft.TextStyle(size=theme.BODY_SIZE),
+                        text_style=ft.TextStyle(
+                            size=theme.BODY_SIZE, font_family=theme.FONT_FAMILY
+                        ),
                     ),
                     on_click=lambda _, m=m: choose(m),
                 )
                 for m in MOODS
             ],
-            ft.Text(
-                "하루에 한 번, 한 장의 카드를 받을 수 있어요.", size=12, color=theme.TEXT_MUTED
-            ),
+            ft.Text("마음이 바뀌면 언제든 다시 고를 수 있어요.", size=12, color=theme.TEXT_MUTED),
         ]
         if not first:
             root.update()
@@ -196,6 +209,7 @@ class CardDeps:
     save_png: Callable[[bytes, str], Awaitable[None]]
     on_faith: Callable[[], None]
     notify: Callable[[str], None]
+    on_repick: Callable[[], None] | None = None  # 다시 고르기
 
 
 def word_card_view(card: WordCard, mood: Mood, verse: Verse, deps: CardDeps) -> ft.Control:
@@ -292,6 +306,17 @@ def word_card_view(card: WordCard, mood: Mood, verse: Verse, deps: CardDeps) -> 
                 ),
             ],
         ),
+    ]
+    if deps.on_repick:
+        controls.append(
+            ft.OutlinedButton(
+                "마음 다시 고르기",
+                icon=ft.Icons.REFRESH,
+                height=44,
+                on_click=lambda _: deps.on_repick(),
+            )
+        )
+    controls += [
         ft.TextButton(
             "신앙이 궁금하다면", icon=ft.Icons.CHURCH_OUTLINED, on_click=lambda _: deps.on_faith()
         ),

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 import flet as ft
 
 from senso.domain.brew import Brew
-from senso.origin import with_flag
 from senso.recommend.engine import NoRecommendation, Recommendation, Result
 from senso.text import josa, quote
 from senso.ui import theme
@@ -117,8 +116,7 @@ def recommend_view(brew: Brew, result: Result, deps: RecommendDeps) -> ft.Contro
                                 color=theme.BROWN,
                             ),
                             ft.Text(
-                                f"{with_flag(brew.bean.name, brew.bean.origin)} · "
-                                f"{format_when(brew.brewed_at)} 기록 기준",
+                                f"{brew.bean.name} · {format_when(brew.brewed_at)} 기록 기준",
                                 size=theme.CAPTION_SIZE,
                                 color=theme.TEXT_MUTED,
                             ),

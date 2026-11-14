@@ -46,6 +46,7 @@ def home_view(
         ],
     )
     records: list[ft.Control] = [
+        *(top or []),  # Sen·So 인사와 오늘의 말씀 한 잔: '나의 기록' 바로 위
         ft.Row(
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             controls=[
@@ -152,7 +153,6 @@ def home_view(
         controls=[
             desktop_actions,
             ft.Container(bgcolor="#FFFDFA", border_radius=18, padding=24, content=taste),
-            *(top or []),
         ],
     )
     view = HomeView(

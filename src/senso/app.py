@@ -18,7 +18,7 @@ from senso.db.database import open_database, schema_version
 from senso.db.quiz_repo import QuizRepository
 from senso.db.recommendation_repo import RecommendationRepository
 from senso.db.settings_repo import WORD_ENABLED, SettingsRepository
-from senso.db.word_repo import AlreadyToday, WordCard, WordRepository
+from senso.db.word_repo import WordCard, WordRepository
 from senso.domain.bean import Bean, BeanKind
 from senso.domain.brew import Brew, BrewDraft
 from senso.photos import MAX_INPUT_BYTES, PhotoError, load_photo
@@ -395,25 +395,18 @@ def authenticated_main(page: ft.Page, user: User) -> None:
         today = words.for_day(config.now().date())
         return [word_home(today, on_pick=open_word_pick, on_open=lambda c: open_word_card(c))]
 
-    def open_word_pick() -> None:
-        today = words.for_day(config.now().date())
-        if today is not None:  # 하루 한 장
-            open_word_card(today)
-            return
+    def open_word_pick(back: Callable[[], None] | None = None) -> None:
+        """기분 고르기. 오늘 이미 받았어도 다시 고를 수 있다 (새 카드가 그날의 카드가 됨)."""
+        back = back or (lambda: open_tab(TAB_HOME))
 
         def picked(mood_key: str, note: str | None) -> None:
             now = config.now()
             mood = MOODS_BY_KEY[mood_key]
             verse = pick_verse(mood, now.date())
-            try:
-                card = words.create(now.date(), mood_key, verse.ref, note, now)
-            except AlreadyToday:
-                card = words.for_day(now.date())
-                assert card is not None
-            open_word_card(card)
+            open_word_card(words.create(now.date(), mood_key, verse.ref, note, now))
 
         nav.selected_index = TAB_HOME
-        show(word_pick_view(PickDeps(on_back=lambda: open_tab(TAB_HOME), on_pick=picked)))
+        show(word_pick_view(PickDeps(on_back=back, on_pick=picked)))
 
     def open_word_card(card: WordCard, back_tab: int = TAB_HOME) -> None:
         found = find_verse(card.mood, card.verse_ref)
@@ -434,6 +427,7 @@ def authenticated_main(page: ft.Page, user: User) -> None:
                     save_png=save_png,
                     on_faith=lambda: open_faith(lambda: open_word_card(card, back_tab)),
                     notify=notify,
+                    on_repick=lambda: open_word_pick(back=lambda: open_word_card(card, back_tab)),
                 ),
             )
         )

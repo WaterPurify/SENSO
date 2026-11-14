@@ -1,4 +1,4 @@
-"""오늘의 말씀 한 잔 기록. 하루에 한 장."""
+"""오늘의 말씀 한 잔 기록. 같은 날 다시 고르면 새 카드가 생기고, 그날의 카드는 마지막 것."""
 
 import sqlite3
 from dataclasses import dataclass
@@ -14,10 +14,6 @@ class WordCard:
     note: str | None
     saved: bool
     created_at: datetime
-
-
-class AlreadyToday(Exception):
-    """오늘은 이미 카드를 받았다."""
 
 
 _COLUMNS = "id, day, mood, verse_ref, note, saved, created_at"
@@ -40,8 +36,10 @@ class WordRepository:
         self.conn = conn
 
     def for_day(self, day: date) -> WordCard | None:
+        """그날 마지막으로 고른 카드."""
         row = self.conn.execute(
-            f"SELECT {_COLUMNS} FROM word_cards WHERE day = ?", (day.isoformat(),)
+            f"SELECT {_COLUMNS} FROM word_cards WHERE day = ? ORDER BY id DESC LIMIT 1",
+            (day.isoformat(),),
         ).fetchone()
         return _to_card(row) if row else None
 
@@ -55,15 +53,12 @@ class WordRepository:
         self, day: date, mood: str, verse_ref: str, note: str | None, now: datetime
     ) -> WordCard:
         note = (note or "").strip() or None
-        try:
-            with self.conn:
-                cur = self.conn.execute(
-                    "INSERT INTO word_cards (day, mood, verse_ref, note, created_at) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (day.isoformat(), mood, verse_ref, note, now.isoformat(timespec="minutes")),
-                )
-        except sqlite3.IntegrityError as e:
-            raise AlreadyToday(day.isoformat()) from e
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO word_cards (day, mood, verse_ref, note, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (day.isoformat(), mood, verse_ref, note, now.isoformat(timespec="minutes")),
+            )
         card = self.get(cur.lastrowid)
         assert card is not None
         return card
@@ -75,6 +70,6 @@ class WordRepository:
     def saved(self) -> list[WordCard]:
         """말씀 노트: 저장한 카드, 최신순."""
         rows = self.conn.execute(
-            f"SELECT {_COLUMNS} FROM word_cards WHERE saved = 1 ORDER BY day DESC"
+            f"SELECT {_COLUMNS} FROM word_cards WHERE saved = 1 ORDER BY day DESC, id DESC"
         ).fetchall()
         return [_to_card(r) for r in rows]
