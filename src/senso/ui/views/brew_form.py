@@ -23,6 +23,7 @@ from senso.domain.brew import (
     validate_brew,
 )
 from senso.ui import theme
+from senso.ui.components.aroma import AromaPicker
 from senso.ui.components.inputs import ChipGroup, ScoreInput, section
 
 
@@ -177,6 +178,8 @@ def brew_form_view(
     )
     wish_box = ft.Column(spacing=6)
     wishes: ChipGroup | None = None
+    aroma_box = ft.Column()
+    aroma: AromaPicker | None = None
     next_memo = ft.TextField(
         label="다음에 원하는 맛 (메모)",
         hint_text="예) 오늘보다 덜 시고 단맛이 더 났으면",
@@ -185,7 +188,7 @@ def brew_form_view(
 
     # ---- 종류(커피/차)에 따라 바뀌는 부분 -----------------------------------------
     def apply_kind(first: bool = False) -> None:
-        nonlocal flavors, wishes
+        nonlocal flavors, wishes, aroma
         kind = current_kind()
         is_coffee = kind is BeanKind.COFFEE
         dose.label = "원두량 *" if is_coffee else "찻잎 양 *"
@@ -212,6 +215,15 @@ def brew_form_view(
             ft.Text("다음에 원하는 변화", color=theme.TEXT_MUTED, size=theme.CAPTION_SIZE),
             wishes.control,
         ]
+        # 향: 커피와 차는 향 목록이 달라 종류가 바뀌면 다시 만든다 (같은 키는 유지)
+        if aroma is not None:
+            old = (aroma.groups, aroma.notes, aroma.intensity.value)
+        elif tasting is not None:
+            old = (list(tasting.aromas), list(tasting.aroma_notes), tasting.aroma_intensity)
+        else:
+            old = ([], [], None)
+        aroma = AromaPicker(kind, old[0], old[1], old[2])
+        aroma_box.controls = [aroma.control]
         if not first:
             form.update()
 
@@ -266,6 +278,9 @@ def brew_form_view(
                 tasting_notes=tasting_notes.value,
                 next_wish=wishes.value if wishes else [],
                 next_memo=next_memo.value,
+                aroma_intensity=aroma.intensity.value if aroma else None,
+                aromas=aroma.groups if aroma else [],
+                aroma_notes=aroma.notes if aroma else [],
                 based_on_brew_id=prefill.based_on_brew_id if prefill and not editing else None,
                 based_on_rec_id=prefill.based_on_rec_id if prefill and not editing else None,
             )
@@ -321,6 +336,9 @@ def brew_form_view(
                 "마셔 본 뒤에 입력해도 돼요. 비워 두고 저장한 뒤 나중에 추가할 수 있어요.",
                 [
                     *[s.control for s in scores.values()],
+                    ft.Divider(color="#EFE6D8"),
+                    aroma_box,
+                    ft.Divider(color="#EFE6D8"),
                     tasting_notes,
                     wish_box,
                     next_memo,

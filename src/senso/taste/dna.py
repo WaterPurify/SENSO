@@ -12,6 +12,7 @@
 from collections import Counter
 from dataclasses import dataclass
 
+from senso.domain.aroma import groups_by_key
 from senso.domain.bean import BeanKind
 from senso.domain.brew import SCORE_FIELDS, Brew
 from senso.text import josa
@@ -41,6 +42,7 @@ class TasteDNA:
     coffee_share: float  # 0~1
     top_flavors: tuple[str, ...]
     evidence: tuple[Brew, ...]  # 만족도가 높은 기록 (근거)
+    top_aromas: tuple[str, ...] = ()  # 좋았던 기록에서 자주 고른 향 계열 (이름)
 
 
 @dataclass(frozen=True)
@@ -103,6 +105,12 @@ def compute(brews: list[Brew]) -> TasteDNA | NotEnough:
         others = [b for b in rated if b.tasting.satisfaction < top]
 
     flavors = Counter(f for b in liked for f in b.desired_flavors)
+    aromas = Counter(
+        group.label
+        for b in liked
+        for key in b.tasting.aromas
+        if (group := groups_by_key(b.kind).get(key))
+    )
     coffee = sum(1 for b in rated if b.kind is BeanKind.COFFEE)
     evidence = sorted(liked, key=lambda b: (b.tasting.satisfaction, b.brewed_at), reverse=True)
 
@@ -113,4 +121,5 @@ def compute(brews: list[Brew]) -> TasteDNA | NotEnough:
         coffee_share=coffee / len(rated),
         top_flavors=tuple(f for f, _ in flavors.most_common(3)),
         evidence=tuple(evidence[:3]),
+        top_aromas=tuple(a for a, _ in aromas.most_common(3)),
     )

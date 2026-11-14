@@ -2,6 +2,7 @@
 
 import flet as ft
 
+from senso.domain.aroma import describe as describe_aromas
 from senso.domain.bean import BeanKind
 from senso.domain.brew import SCORE_FIELDS, Recipe, Tasting, format_number, format_time
 from senso.ui import theme
@@ -25,11 +26,15 @@ def recipe_values(recipe: Recipe, kind: BeanKind, iced: bool) -> list[tuple[str,
     return rows
 
 
-def tasting_values(t: Tasting) -> list[tuple[str, str]]:
-    return [
+def tasting_values(t: Tasting, kind: BeanKind | None = None) -> list[tuple[str, str]]:
+    values = [
         (SCORE_FIELDS[k][0], "-" if getattr(t, k) is None else f"{getattr(t, k)}점")
         for k in SCORE_FIELDS
     ]
+    if kind is not None:
+        values.append(("향", describe_aromas(kind, t.aromas, t.aroma_notes) or "-"))
+        values.append(("향 세기", "-" if t.aroma_intensity is None else f"{t.aroma_intensity}점"))
+    return values
 
 
 def compare_table(

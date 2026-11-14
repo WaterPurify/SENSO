@@ -5,6 +5,7 @@ from collections.abc import Callable
 import flet as ft
 
 from senso.domain.bean import LABELS, ROAST_LEVELS, TEA_TYPES, Bean, BeanKind
+from senso.domain.tea import caffeine_tag
 from senso.text import josa
 from senso.ui import theme
 from senso.ui.components.empty_state import empty_state
@@ -49,6 +50,8 @@ def describe(bean: Bean) -> str:
         parts.append(ROAST_LEVELS.get(bean.roast_level, bean.roast_level))
     if bean.kind is BeanKind.TEA and bean.tea_type:
         parts.append(TEA_TYPES.get(bean.tea_type, bean.tea_type))
+        if caffeine := caffeine_tag(bean.tea_type):
+            parts.append(caffeine)
     if bean.produced_on:
         parts.append(bean.produced_on.strftime("%Y.%m.%d"))
     return " · ".join(parts) if parts else "상세 정보 없음"

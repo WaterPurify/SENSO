@@ -69,8 +69,8 @@ def compare_view(before: Brew, after: Brew, on_back: Callable[[], None]) -> ft.C
                     compare_table(
                         "이전",
                         "이번",
-                        tasting_values(before.tasting),
-                        tasting_values(after.tasting),
+                        tasting_values(before.tasting, before.kind),
+                        tasting_values(after.tasting, after.kind),
                     )
                 ],
             ),

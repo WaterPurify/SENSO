@@ -132,6 +132,10 @@ def _dna_section(dna: TasteDNA | NotEnough, on_open: Callable[[Brew], None]) -> 
                             tag(f, bgcolor="#E8F0E0", color=theme.TEA_GREEN)
                             for f in dna.top_flavors
                         ],
+                        *[
+                            tag(f"향 · {a}", bgcolor="#F3E6EF", color="#7D3F6B")
+                            for a in dna.top_aromas
+                        ],
                     ],
                 ),
             ],

@@ -24,6 +24,7 @@ from senso.photos import PhotoError, delete_photo, load_photo, prepare_photo, sa
 from senso.text import josa, quote
 from senso.ui import theme
 from senso.ui.components.flag import flag_image
+from senso.ui.components.tea_info import tea_info_card
 
 PickImage = Callable[[], Awaitable[bytes | None]]
 
@@ -179,6 +180,20 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
         )
         choice_field = "tea_type"
 
+    tea_box = ft.Column(visible=kind is BeanKind.TEA)
+
+    def render_tea_info() -> None:
+        card = tea_info_card(choice.value) if kind is BeanKind.TEA else None
+        tea_box.controls = [card] if card else []
+
+    def on_tea_type(_: ft.Event) -> None:
+        render_tea_info()
+        tea_box.update()
+
+    if kind is BeanKind.TEA:
+        choice.on_select = on_tea_type
+    render_tea_info()
+
     fields = {"name": name, "origin": origin, "producer": producer, "produced_on": produced_on}
 
     def clear_error(e: ft.Event) -> None:
@@ -294,6 +309,7 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
             producer,
             produced_on,
             ft.Row([choice]),
+            tea_box,
             ft.Row(actions),
         ],
     )

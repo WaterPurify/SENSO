@@ -6,12 +6,15 @@ from dataclasses import dataclass
 import flet as ft
 
 from senso.db.brew_repo import BrewRepository
+from senso.domain.aroma import AROMA_INTENSITY
 from senso.domain.bean import LABELS, ROAST_LEVELS, TEA_TYPES, BeanKind
 from senso.domain.brew import NEXT_WISHES, SCORE_FIELDS, Brew, format_number, format_time
 from senso.ui import theme
+from senso.ui.components.aroma import aroma_summary
 from senso.ui.components.brew_card import format_when, satisfaction_tag, tag
 from senso.ui.components.flag import flagged_name
 from senso.ui.components.inputs import section
+from senso.ui.components.tea_info import tea_info_card
 
 
 @dataclass
@@ -59,8 +62,8 @@ def recipe_rows(brew: Brew) -> list[ft.Control]:
     return rows
 
 
-def score_row(key: str, value: int | None) -> ft.Control:
-    label, low, high = SCORE_FIELDS[key]
+def score_row(key: str, value: int | None, labels: tuple[str, str, str] | None = None):
+    label, low, high = labels or SCORE_FIELDS[key]
     dots = [
         ft.Container(
             width=14,
@@ -118,6 +121,11 @@ def brew_detail_view(brew: Brew, deps: DetailDeps) -> ft.Control:
         ]
     else:
         felt = [score_row(k, getattr(t, k)) for k in SCORE_FIELDS]
+        if t.aromas or t.aroma_intensity:
+            felt.append(ft.Divider(color="#EFE6D8"))
+            felt.append(ft.Text("향", weight=ft.FontWeight.BOLD, color=theme.BROWN))
+            felt += aroma_summary(brew.kind, t.aromas, t.aroma_notes)
+            felt.append(score_row("aroma_intensity", t.aroma_intensity, AROMA_INTENSITY))
         if t.notes:
             felt.append(info_row("느낀 점", t.notes))
         if t.next_wish:
@@ -243,6 +251,11 @@ def brew_detail_view(brew: Brew, deps: DetailDeps) -> ft.Control:
             section("원했던 맛", "추출 전에 고른 오늘의 선호", [wanted]),
             section("레시피", None, recipe_rows(brew)),
             section("실제로 느낀 맛", "마셔 본 뒤의 평가", felt),
+            *(
+                [card]
+                if brew.kind is BeanKind.TEA and (card := tea_info_card(brew.bean.tea_type))
+                else []
+            ),
             *([section("연결된 기록", None, links)] if links else []),
             *actions,
         ],

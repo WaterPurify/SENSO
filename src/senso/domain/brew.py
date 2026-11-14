@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
+from senso.domain.aroma import clean_aromas
 from senso.domain.bean import Bean, BeanKind
 
 # ---- 선택지 ------------------------------------------------------------------
@@ -88,12 +89,21 @@ class Tasting:
     notes: str | None = None
     next_wish: tuple[str, ...] = ()
     next_memo: str | None = None
+    # 향(냄새) 평가: 세기, 계열 키, 세부 향 (senso.domain.aroma)
+    aroma_intensity: int | None = None
+    aromas: tuple[str, ...] = ()
+    aroma_notes: tuple[str, ...] = ()
 
     @property
     def is_empty(self) -> bool:
         scores = (self.acidity, self.bitterness, self.sweetness, self.body, self.satisfaction)
         return all(s is None for s in scores) and not (
-            self.notes or self.next_wish or self.next_memo
+            self.notes
+            or self.next_wish
+            or self.next_memo
+            or self.aroma_intensity
+            or self.aromas
+            or self.aroma_notes
         )
 
 
@@ -270,6 +280,9 @@ def validate_brew(
     tasting_notes: str | None = None,
     next_wish: list[str] | tuple[str, ...] = (),
     next_memo: str | None = None,
+    aroma_intensity: int | None = None,
+    aromas: list[str] | tuple[str, ...] = (),
+    aroma_notes: list[str] | tuple[str, ...] = (),
     based_on_brew_id: int | None = None,
     based_on_rec_id: int | None = None,
 ) -> BrewDraft:
@@ -309,6 +322,16 @@ def validate_brew(
     if "keep" in wishes and len(wishes) > 1:
         errors["next_wish"] = "'이대로 좋아요'는 다른 변화와 함께 고를 수 없어요"
 
+    intensity = _score(aroma_intensity, "aroma_intensity", errors)
+    aroma_groups: tuple[str, ...] = ()
+    aroma_picked: tuple[str, ...] = ()
+    if snapshot is not None:
+        aroma_groups, aroma_picked, bad_aromas = clean_aromas(
+            snapshot.kind, tuple(aromas), tuple(aroma_notes)
+        )
+        if bad_aromas:
+            errors["aromas"] = f"알 수 없는 향: {', '.join(bad_aromas)}"
+
     if errors:
         raise BrewValidationError(errors)
     assert snapshot is not None and dose is not None and water is not None
@@ -334,6 +357,9 @@ def validate_brew(
             notes=_blank(tasting_notes),
             next_wish=wishes,
             next_memo=_blank(next_memo),
+            aroma_intensity=intensity,
+            aromas=aroma_groups,
+            aroma_notes=aroma_picked,
         ),
         based_on_brew_id=based_on_brew_id,
         based_on_rec_id=based_on_rec_id,

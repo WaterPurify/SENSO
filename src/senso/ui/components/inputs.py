@@ -14,8 +14,10 @@ _GAP = 8
 class ScoreInput:
     """1~5점 버튼. 같은 점수를 다시 누르면 '미입력'으로 돌아간다(중간 점수와 구분)."""
 
-    def __init__(self, key: str, value: int | None = None):
-        label, low, high = SCORE_FIELDS[key]
+    def __init__(
+        self, key: str, value: int | None = None, labels: tuple[str, str, str] | None = None
+    ):
+        label, low, high = labels or SCORE_FIELDS[key]
         self.key = key
         self.value = value
         self._buttons = [

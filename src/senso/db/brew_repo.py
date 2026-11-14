@@ -14,6 +14,7 @@ _COLUMNS = (
     "id, bean_id, bean_snapshot, brewed_at, desired_flavors, hot_or_iced, equipment, "
     "dose_g, water_g, temp_c, grind, time_s, ice_g, notes, "
     "acidity, bitterness, sweetness, body, satisfaction, tasting_notes, next_wish, next_memo, "
+    "aroma_intensity, aromas, aroma_notes, "
     "based_on_brew_id, based_on_rec_id, is_sample"
 )
 
@@ -57,6 +58,9 @@ def _to_brew(row: sqlite3.Row) -> Brew:
             notes=row["tasting_notes"],
             next_wish=_json_list(row["next_wish"]),
             next_memo=row["next_memo"],
+            aroma_intensity=row["aroma_intensity"],
+            aromas=_json_list(row["aromas"]),
+            aroma_notes=_json_list(row["aroma_notes"]),
         ),
         based_on_brew_id=row["based_on_brew_id"],
         based_on_rec_id=row["based_on_rec_id"],
@@ -88,6 +92,9 @@ def _fields(draft: BrewDraft) -> dict:
         "tasting_notes": t.notes,
         "next_wish": json.dumps(list(t.next_wish)),
         "next_memo": t.next_memo,
+        "aroma_intensity": t.aroma_intensity,
+        "aromas": json.dumps(list(t.aromas)),
+        "aroma_notes": json.dumps(list(t.aroma_notes), ensure_ascii=False),
         "based_on_brew_id": draft.based_on_brew_id,
         "based_on_rec_id": draft.based_on_rec_id,
     }
