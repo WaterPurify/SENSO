@@ -21,6 +21,18 @@
 - 아이디별 잠금은 남이 일부러 내 계정을 잠그게 만들 수 있다(5분). 주소별 잠금이 이를 줄이지만 완전히 막지는 못한다.
 - 30분 자동 로그아웃은 긴 기록을 쓰는 중에도 화면 이동이나 키 입력이 없으면 동작한다.
 
+## 웹·저장소 보안 (0.10.1)
+
+| 항목 | 내용 | 위치 |
+|---|---|---|
+| 보안 헤더 | 모든 웹 응답에 붙인다. `Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'`, `X-Frame-Options: DENY`(다른 사이트의 iframe 안에 못 넣음), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`(유튜브 등으로 나갈 때 주소를 보내지 않음), `Permissions-Policy`(카메라·마이크·위치·결제 차단), `Cross-Origin-Opener-Policy: same-origin`, `Strict-Transport-Security`(HTTPS 접속일 때만 브라우저가 적용). `Server` 헤더는 지운다 | `src/senso/web_security.py`, `src/main.py` |
+| CSP 범위 | Flutter 웹이 쓰는 스크립트·WebAssembly를 막지 않도록 `script-src`는 정하지 않았다. 스크립트까지 제한하려면 Flet이 만드는 페이지에 맞춰 따로 시험해야 한다 | |
+| CI 고정 | GitHub Actions를 태그가 아닌 커밋 해시로 불러온다(태그가 바뀌어도 같은 코드). 체크아웃할 때 저장소 토큰을 디스크에 남기지 않는다(`persist-credentials: false`), 권한은 읽기만 | `.github/workflows/ci.yml` |
+| 취약점 검사 | push·PR마다 `pip-audit`가 `requirements.lock`(해시 고정)의 알려진 취약점을 검사한다. 2026-11-14 기준 발견 없음 | CI `dependency-audit` |
+| 업데이트 알림 | Dependabot이 매주 Actions·Python 패키지·Docker 베이스 이미지의 새 버전을 PR로 연다. CI가 통과하는지 보고 합친다 | `.github/dependabot.yml` |
+
+GitHub 저장소 설정에서 직접 켜야 하는 것: main 브랜치 보호(직접 push 막기, CI 통과 필수), Secret scanning·Push protection, Dependabot alerts, 계정 2단계 인증.
+
 ## 사용 방법
 
 웹·데스크톱 모두 오른쪽 위 **로그인**에서 로그인하거나 회원가입합니다.

@@ -1,0 +1,21 @@
+# 의존성 업데이트 알림: 매주 새 버전·보안 패치가 있으면 PR을 연다.
+# PR을 합치기 전에 CI(테스트·pip-audit·운영 이미지 빌드)가 통과하는지 확인한다.
+version: 2
+updates:
+  - package-ecosystem: github-actions # .github/workflows 의 actions (커밋 해시 고정 유지)
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: pip # requirements.in → requirements.lock (pip-compile, 해시 포함)
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker # Dockerfile.prod 의 python 베이스 이미지 (다이제스트 고정)
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3

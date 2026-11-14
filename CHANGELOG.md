@@ -4,6 +4,13 @@
 `v버전 · 빌드 …`가 나온다. 빌드 표시는 git 커밋(개발용) 또는 소스 코드 지문(운영용)이라, 새 코드가 웹에
 올라갔는지 이것으로 확인할 수 있다.
 
+## 0.10.1 — 2026-11-14
+
+- 웹 보안 헤더: 클릭재킹 방지(frame-ancestors 'none', X-Frame-Options DENY), nosniff, no-referrer,
+  카메라·마이크·위치·결제 기능 차단, HTTPS 접속 시 HSTS, 서버 이름 숨김 (senso/web_security.py)
+- CI: GitHub Actions를 커밋 해시로 고정, 체크아웃 토큰을 남기지 않음, pip-audit로 운영 의존성의 알려진 취약점 검사
+- Dependabot: Actions·Python 패키지·Docker 베이스 이미지 업데이트를 매주 PR로
+
 ## 0.10.0 — 2026-11-14
 
 - 하단 탭 6개: 기록·커피·차·나·쇼핑·책갈피
