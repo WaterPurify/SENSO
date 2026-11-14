@@ -1,10 +1,13 @@
 # SENSO 운영(배포)용 실행 설정. 개발용 compose.yaml과 따로 쓴다.
 #
-#   켜기:  docker compose -f compose.prod.yaml up -d --build   → http://localhost:8551
-#   끄기:  docker compose -f compose.prod.yaml down            (데이터는 senso-prod_data 볼륨에 남음)
+#   켜기:  docker compose -f compose.prod.yaml up -d --build
+#          → 이 PC:              http://localhost:8551
+#          → 내 기기(Tailscale): https://senso.<내 tailnet>.ts.net
+#   끄기:  docker compose -f compose.prod.yaml down   (데이터·Tailscale 로그인은 볼륨에 남음)
 #   상태:  docker compose -f compose.prod.yaml ps
 #
 # 개발용(8550)과 포트·데이터 볼륨이 달라 둘을 함께 켜도 섞이지 않는다.
+# Tailscale 처음 설정은 PRODUCTION.md의 "Tailscale로 HTTPS" 참고.
 
 name: senso-prod
 
@@ -13,10 +16,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
+      args:
+        SENSO_BUILD: ${SENSO_BUILD:-}   # 선택. 비우면 소스 코드 지문이 빌드 표시가 된다
     image: senso-prod:latest
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8551:8550"   # 이 PC에서만 접속. 밖으로 열 때는 HTTPS 프록시를 앞에 둔다
+      - "127.0.0.1:8551:8550"   # 이 PC에서만 바로 접속. 다른 기기는 Tailscale(HTTPS)로
     volumes:
       - data:/data              # DB와 사진. 쓸 수 있는 곳은 여기와 /tmp뿐
     read_only: true             # 이미지 안의 파일(코드 포함)은 고칠 수 없다
@@ -36,5 +41,40 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Tailscale: 내 Tailscale 계정에 로그인한 기기에서만 HTTPS로 접속하게 해 주는 문지기.
+  # 인터넷 전체에 공개하지 않는다 (Funnel 끔). 공유기 포트도 열지 않는다.
+  # 앱과 네트워크를 따로 쓰므로, Tailscale이 다시 시작돼도 앱(localhost:8551)은 영향이 없다.
+  ts:
+    image: tailscale/tailscale@sha256:72c1e19e0aedca96b8533bbb0b4368564410ff20b17e53b804eb6c1f04a31be4  # v1.104.7
+    hostname: senso             # 주소가 https://senso.<tailnet>.ts.net 이 된다
+    restart: unless-stopped
+    environment:
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"      # 커널 권한 없이 동작
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_AUTH_ONCE: "true"
+      TS_AUTHKEY: ${TS_AUTHKEY:-}  # .env에 넣는다 (PRODUCTION.md). 처음 한 번만 쓰인다
+    volumes:
+      - ts-state:/var/lib/tailscale
+      - ./tailscale/serve.json:/config/serve.json:ro
+    depends_on:
+      - app
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+      - /var/run/tailscale:size=1m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
 volumes:
   data:
+  ts-state:

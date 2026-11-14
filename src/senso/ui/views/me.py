@@ -4,7 +4,6 @@ from collections.abc import Callable
 
 import flet as ft
 
-from senso import __version__
 from senso.characters.lines import Line, Who
 from senso.db.quiz_repo import SavedQuiz
 from senso.domain.brew import Brew
@@ -15,6 +14,7 @@ from senso.ui.components.brew_card import format_when, tag
 from senso.ui.components.character import speech_bubble
 from senso.ui.components.header import header
 from senso.ui.components.inputs import section
+from senso.version import version_label
 
 DIRECTION_TEXT = {
     "high": "높을수록 좋아요",
@@ -159,7 +159,7 @@ def me_view(
             *([word_section] if word_section else []),
             *([account_section] if account_section else []),
             ft.Text(
-                f"버전 {__version__} · 데이터 스키마 v{schema_version}",
+                f"{version_label()} · 데이터 스키마 v{schema_version}",
                 size=theme.CAPTION_SIZE,
                 color=theme.TEXT_MUTED,
             ),

@@ -5,6 +5,7 @@ from collections.abc import Callable
 import flet as ft
 
 from senso.ui import theme
+from senso.version import version_label
 
 DESKTOP_WIDTH = 1160
 
@@ -191,6 +192,15 @@ def landing_view(on_signup: Callable[[], None], on_example: Callable[[], None]) 
             ft.Divider(color="#E6DFD3"),
             steps,
             ft.Divider(color="#E6DFD3"),
-            ft.Text("senso — 한 잔에서 시작하는 나의 취향", size=12, color=theme.TEXT_MUTED),
+            ft.Row(
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                wrap=True,
+                controls=[
+                    ft.Text(
+                        "senso — 한 잔에서 시작하는 나의 취향", size=12, color=theme.TEXT_MUTED
+                    ),
+                    ft.Text(version_label(), size=12, color=theme.TEXT_MUTED),
+                ],
+            ),
         ],
     )

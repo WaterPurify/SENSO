@@ -20,6 +20,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     FLET_SERVER_PORT=8550 \
     HOME=/tmp
 
+# 화면에 보여 줄 빌드 표시 (비워 두면 앱이 소스 코드 지문을 대신 보여 준다)
+ARG SENSO_BUILD=""
+ENV SENSO_BUILD=${SENSO_BUILD}
+
 WORKDIR /app
 
 COPY requirements.lock .

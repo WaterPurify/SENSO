@@ -1,6 +1,6 @@
 [project]
 name = "senso"
-version = "0.1.0"
+version = "0.8.0"
 description = "SENSO - Sen & So와 함께 찾는 나만의 커피·차 한 잔"
 requires-python = ">=3.12"
 dependencies = [
