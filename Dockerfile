@@ -1,5 +1,5 @@
 # SENSO 개발 환경: Python 3.12 + Flet(웹 모드) + 테스트 도구
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
