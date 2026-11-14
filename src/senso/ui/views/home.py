@@ -34,6 +34,8 @@ def home_view(
     on_repeat: Callable[[Brew], None],
     rated_count: int,
     on_taste: Callable[[], None],
+    hero: ft.Control | None = None,
+    side_extra: list[ft.Control] | None = None,
 ) -> ft.Control:
     filters = ft.Row(
         wrap=True,
@@ -153,12 +155,14 @@ def home_view(
         controls=[
             desktop_actions,
             ft.Container(bgcolor="#FFFDFA", border_radius=18, padding=24, content=taste),
+            *(side_extra or []),
         ],
     )
     view = HomeView(
         spacing=26,
         controls=[
-            ft.Column(
+            hero
+            or ft.Column(
                 spacing=8,
                 controls=[
                     eyebrow("MY DAILY BREW"),

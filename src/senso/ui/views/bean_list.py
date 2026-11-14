@@ -101,10 +101,11 @@ def bean_list_view(
     on_add: Callable[[], None],
     on_open: Callable[[Bean], None],
     top: list[ft.Control] | None = None,
+    hero: ft.Control | None = None,
 ) -> ft.Control:
     labels = LABELS[kind]
     controls: list[ft.Control] = [
-        header(labels.title, SUBTITLES[kind]),
+        hero or header(labels.title, SUBTITLES[kind]),
         *(top or []),
         ft.FilledButton(
             f"{labels.item} 등록",

@@ -18,8 +18,8 @@
 | v2.5 반영 (추가) | ✅ 완료 | 산지 국기 표시, 오늘의 말씀 한 잔. 출시 전에 말씀 본문 원문 대조와 묵상 문장 목회자 검수 필요 |
 | W8 안정화·APK | ⏳ 예정 | |
 
-- 테스트: pytest **246개** 통과, Ruff 검사 통과
-- 데이터 스키마: **v7** (마이그레이션 001–007)
+- 테스트: pytest **287개** 통과 (Linux·CI 기준), Ruff 검사 통과
+- 데이터 스키마: **v8** (마이그레이션 001–008)
 - 로그인·계정별 데이터 보관과 첫 화면·홈 화면 새 디자인은 [SECURITY_AND_SETUP.md](SECURITY_AND_SETUP.md) 참고
 - 커밋 기록: https://github.com/WaterPurify/SENSO/commits/main
 
@@ -34,6 +34,9 @@
 | 산지 국기 | 산지(없으면 이름)에서 나라를 찾아 국기를 표시. 예: 에티오피아 예가체프 🇪🇹, 제주 세작 🇰🇷 | 사용자 요청 | ✅ |
 | 추출·시음 기록 | 추출 전 조건과 시음 후 평가를 나눠 입력. 평가는 나중에 추가 가능 | Coffee Bible ③ | ✅ |
 | 향 평가 | 시음 후 향 계열 → 세부 향 → 향 세기. 커피·차 목록이 다름 (플레이버 휠 방식) | 사용자 요청 | ✅ |
+| 쇼핑 탭 | 출시 예정 상품(테이스팅 박스·멤버십·선물세트·굿즈)과 출시 알림 받기. 결제 없음 | 사업계획서 3-5 | ✅ |
+| 책갈피 탭 | 기록·원두·차·상품·소식 책갈피와 말씀 노트를 한곳에 | 사용자 요청 | ✅ |
+| SENSO 소식 | 유튜브·인스타그램 링크 카드(주소는 content_links.json) | 사용자 요청 | ✅ (주소 준비 중) |
 | 차 종류별 특징 | 카페인 정도, 대표 성분, 알려진 특징, 우리는 법 (의학적 효능 아님 안내) | 나무위키 '차' 요약 | ✅ |
 | 기록 목록·상세 | 최신순 목록, 수정, 확인 후 삭제, 빈 목록 안내, 예시 데이터 | Coffee Bible ①④ | ✅ |
 | 다음 레시피 추천 | 규칙 기반. 한 번에 한 조건만 바꾸고, 바꾸기 전·후 값과 이유를 표시. 비교 화면과 "이 레시피로 새 기록" 제공 | Coffee Bible ④⑤ | ✅ |
@@ -122,13 +125,14 @@ SENSO/app/
   tests/                   # pytest
 ```
 
-### 데이터 모델(스키마 v7)
+### 데이터 모델(스키마 v8)
 - **beans**: id, kind(coffee/tea), name, origin(산지, v4), producer(로스터리 / 브랜드·찻집), produced_on(로스팅 날짜 / 제조일), roast_level(커피), tea_type(차), photo_path, is_sample, deleted_at
 - **brews**: id, bean_id, **bean_snapshot(JSON)**, brewed_at, desired_flavors, hot_or_iced, equipment(JSON), dose_g, water_g, temp_c, grind(문자열), time_s, ice_g, notes, acidity/bitterness/sweetness/body(NULL = 미입력), satisfaction, tasting_notes, next_wish, next_memo(v3), aroma_intensity·aromas·aroma_notes(v7), based_on_brew_id, based_on_rec_id, is_sample
 - **recommendations**: id, source_brew_id, changed_field, from_value, to_value_or_direction, reason, method('rule-v1')
 - **quiz_results**: id, taken_at, answers(JSON), type_code
 - **app_settings** (v4): key, value. 예: `word_enabled` = '1' 켬 / '0' 끔 / 없음 = 아직 고르지 않음
 - **word_cards** (v4, v5에서 하루 여러 장 허용): id, day, mood, verse_ref, note, saved(말씀 노트), created_at
+- **bookmarks** (v8): id, kind(brew·bean·product·content), ref, title, created_at — (kind, ref) 하나만
 
 > 원두는 삭제할 때 실제로 지우지 않고 삭제 표시만 한다(소프트 삭제). 기록에는 원두 정보 사본(스냅샷, 산지 포함)을 저장해서, 원두를 지우거나 고쳐도 과거 기록이 바뀌지 않게 한다.
 
@@ -141,6 +145,7 @@ SENSO/app/
 | v5 | 말씀 카드 다시 고르기 (하루 한 장 제약 제거) |
 | v6 | 말씀 한 잔에 적은 한 줄을 저장하지 않음 (민감정보 최소화) |
 | v7 | 시음 후 향 평가 (aroma_intensity, aromas, aroma_notes) |
+| v8 | 책갈피 (bookmarks: kind, ref, title) |
 
 ---
 
@@ -234,7 +239,7 @@ SENSO/app/
 - [x] 원두·차 이름 옆에 산지 국기가 표시된다
 - [x] 말씀 한 잔: 켠 사용자만 카드를 받고, 다시 고르거나 노트에 저장할 수 있다
 - [x] 말씀 한 잔: 위기 신호가 있으면 상담 안내가 먼저 나온다
-- [x] pytest가 모두 통과한다 (246개)
+- [x] pytest가 모두 통과한다 (287개, Linux·CI 기준)
 - [ ] PC(Windows)와 Android 실기기에서 검증했다 (검증한 기기 기록) — 지금은 Windows 브라우저(웹 모드)에서만 확인
 
 ## 7. 8주 이후(사업계획서 W9–W16)

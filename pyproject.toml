@@ -1,6 +1,6 @@
 [project]
 name = "senso"
-version = "0.9.0"
+version = "0.10.0"
 description = "SENSO - Sen & So와 함께 찾는 나만의 커피·차 한 잔"
 requires-python = ">=3.12"
 dependencies = [
@@ -42,6 +42,9 @@ select = ["E", "F", "I", "B", "UP"]
 "src/senso/taste/quiz.py" = ["E501"]
 "src/senso/origin.py" = ["E501"]
 "src/senso/domain/tea.py" = ["E501"]
+"src/senso/shop.py" = ["E501"]
+"src/senso/art.py" = ["E501"]
+"src/senso/ui/views/shop_view.py" = ["E501"]
 "src/senso/domain/aroma.py" = ["E501"]
 "src/senso/word/*.py" = ["E501"]
 "src/senso/ui/views/word_view.py" = ["E501"]

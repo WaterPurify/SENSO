@@ -3,6 +3,7 @@
 from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from dataclasses import dataclass
+from dataclasses import field as dc_field
 from pathlib import Path
 
 import flet as ft
@@ -38,6 +39,7 @@ class FormDeps:
     notify: Callable[[str], None]
     confirm: Callable[[str, str, str, Callable[[], None]], None]
     close: Callable[[], None]  # 목록으로 돌아가기
+    header_actions: list[ft.Control] = dc_field(default_factory=list)  # 예: 책갈피 단추 (수정할 때)
     access: Callable = nullcontext
 
 
@@ -297,8 +299,13 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
                 controls=[
                     ft.IconButton(ft.Icons.ARROW_BACK, tooltip="뒤로", on_click=on_cancel),
                     ft.Text(
-                        title, size=theme.HEADING_SIZE, weight=ft.FontWeight.BOLD, color=theme.BROWN
+                        title,
+                        size=theme.HEADING_SIZE,
+                        weight=ft.FontWeight.BOLD,
+                        color=theme.BROWN,
+                        expand=True,
                     ),
+                    *(deps.header_actions if editing else []),
                 ]
             ),
             ft.Row(

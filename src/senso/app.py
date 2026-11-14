@@ -1,4 +1,4 @@
-"""앱 조립: DB 열기, 테마 적용, 하단 탭(기록·커피·차·나)과 화면 전환."""
+"""앱 조립: DB 열기, 테마 적용, 하단 탭(기록·커피·차·나·쇼핑·책갈피)과 화면 전환."""
 
 import asyncio
 import time
@@ -14,7 +14,9 @@ from senso.characters.lines import (
     home_greeting,
     recommendation_line,
 )
+from senso.content import ContentLink, load_links, safe_url
 from senso.db.bean_repo import BeanRepository
+from senso.db.bookmark_repo import Bookmark, BookmarkRepository
 from senso.db.brew_repo import BrewRepository
 from senso.db.database import schema_version
 from senso.db.quiz_repo import QuizRepository
@@ -29,15 +31,21 @@ from senso.recommend.apply import draft_from_brew, draft_from_recommendation
 from senso.recommend.engine import Recommendation, recommend
 from senso.samples import add_samples, remove_samples
 from senso.sessions import DataSession
+from senso.shop import NOTIFY_PREFIX, Product
 from senso.taste.dna import compute as compute_dna
 from senso.taste.quiz import QuizResult
 from senso.ui import theme
+from senso.ui.components.banner import hero_banner, page_background
+from senso.ui.components.bookmark import bookmark_button
+from senso.ui.components.brew_card import format_when
 from senso.ui.components.character import speech_bubble
 from senso.ui.components.compare import compare_table, recipe_values
+from senso.ui.components.content_cards import content_section
 from senso.ui.components.inputs import section
 from senso.ui.views.account import account_section, delete_dialog, password_dialog
 from senso.ui.views.bean_form import FormDeps, bean_form_view
 from senso.ui.views.bean_list import bean_list_view
+from senso.ui.views.bookmark_view import BookmarkDeps, bookmark_view
 from senso.ui.views.brew_detail import DetailDeps, brew_detail_view
 from senso.ui.views.brew_form import BrewFormDeps, brew_form_view
 from senso.ui.views.compare_view import compare_view
@@ -47,6 +55,7 @@ from senso.ui.views.login import login_view
 from senso.ui.views.me import me_view
 from senso.ui.views.quiz_view import QuizDeps, quiz_view
 from senso.ui.views.recommend_view import RecommendDeps, recommend_view
+from senso.ui.views.shop_view import ShopDeps, shop_view
 from senso.ui.views.word_view import (
     CardDeps,
     PickDeps,
@@ -64,8 +73,10 @@ TABS = [
     (ft.Icons.COFFEE_OUTLINED, ft.Icons.COFFEE, "커피"),
     (ft.Icons.EMOJI_FOOD_BEVERAGE_OUTLINED, ft.Icons.EMOJI_FOOD_BEVERAGE, "차"),
     (ft.Icons.PERSON_OUTLINE, ft.Icons.PERSON, "나"),
+    (ft.Icons.STOREFRONT_OUTLINED, ft.Icons.STOREFRONT, "쇼핑"),
+    (ft.Icons.BOOKMARK_BORDER, ft.Icons.BOOKMARK, "책갈피"),
 ]
-TAB_HOME, TAB_COFFEE, TAB_TEA, TAB_ME = range(4)
+TAB_HOME, TAB_COFFEE, TAB_TEA, TAB_ME, TAB_SHOP, TAB_BOOKMARK = range(6)
 TAB_KINDS = {TAB_COFFEE: BeanKind.COFFEE, TAB_TEA: BeanKind.TEA}
 
 CONTENT_MAX_WIDTH = 640  # 넓은 화면에서도 폰처럼 가운데 한 줄로
@@ -145,10 +156,24 @@ def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None
     quizzes = QuizRepository(conn)
     settings = SettingsRepository(conn)
     words = WordRepository(conn)
+    bookmarks = BookmarkRepository(conn)
+    links = load_links()
     photo_dir = directory / "photos"
     photo_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     picker = ft.FilePicker()  # 페이지에 서비스로 등록된다
+    launcher = ft.UrlLauncher()
+
+    async def open_url(url: str) -> None:
+        """허용한 유튜브·인스타그램 https 주소만 새 창으로 연다."""
+        for link in links:
+            if link.url == url and safe_url(link.platform, url):
+                try:
+                    await launcher.launch_url(url)
+                except Exception:
+                    notify("링크를 열지 못했어요.")
+                return
+        notify("열 수 없는 주소예요.")
 
     async def pick_image() -> bytes | None:
         files = await picker.pick_files(
@@ -343,6 +368,16 @@ def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None
             notify=notify,
             confirm=confirm,
             close=lambda: open_tab(tab),
+            header_actions=(
+                [
+                    bookmark_button(
+                        bookmarks.has("bean", bean.id),
+                        lambda: bookmarks.toggle("bean", bean.id, bean.name),
+                    )
+                ]
+                if bean is not None
+                else []
+            ),
         )
         nav.selected_index = tab
         show(bean_form_view(kind, bean, deps))
@@ -391,6 +426,14 @@ def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None
                     on_deleted=lambda: open_tab(TAB_HOME),
                     on_recommend=lambda b: open_recommendation(b.id),
                     on_compare=open_compare,
+                    header_actions=[
+                        bookmark_button(
+                            bookmarks.has("brew", brew.id),
+                            lambda: bookmarks.toggle(
+                                "brew", brew.id, f"{brew.bean.name} · {format_when(brew.brewed_at)}"
+                            ),
+                        )
+                    ],
                 ),
             )
         )
@@ -543,6 +586,56 @@ def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None
     def open_faith(back: Callable[[], None]) -> None:
         show(faith_view(back))
 
+    # ---- 쇼핑·책갈피·소식 -----------------------------------------------------
+    def toggle_content(link: ContentLink) -> bool:
+        return bookmarks.toggle("content", link.key, link.title)
+
+    def toggle_product(p: Product) -> bool:
+        return bookmarks.toggle("product", p.key, p.name)
+
+    def news_section() -> list[ft.Control]:
+        section_ = content_section(
+            links,
+            open_url,
+            is_bookmarked=lambda key: bookmarks.has("content", key),
+            on_bookmark=toggle_content,
+        )
+        return [section_] if section_ else []
+
+    def open_bookmark(mark: Bookmark) -> None:
+        if mark.kind in ("brew", "bean"):
+            try:
+                ref = int(mark.ref)
+            except ValueError:
+                ref = -1
+            if mark.kind == "brew" and brews.get(ref):
+                open_brew_detail(ref)
+                return
+            bean = beans.get(ref) if mark.kind == "bean" else None
+            if bean is not None:
+                open_bean_form(bean.kind, bean)
+                return
+            bookmarks.remove(mark.kind, mark.ref)
+            notify("지워진 항목이라 책갈피에서 뺐어요.")
+            open_tab(TAB_BOOKMARK)
+        elif mark.kind == "product":
+            open_tab(TAB_SHOP)
+        elif mark.kind == "content":
+            link = next((x for x in links if x.key == mark.ref), None)
+            if link and link.url:
+                page.run_task(open_url, link.url)
+            else:
+                notify("아직 준비 중인 소식이에요.")
+
+    def remove_bookmark(mark: Bookmark) -> None:
+        bookmarks.remove(mark.kind, mark.ref)
+        notify("책갈피에서 뺐어요.")
+        show(build_tab(TAB_BOOKMARK), scroll_to_top=False)
+
+    def word_label(card: WordCard) -> str:
+        mood = MOODS_BY_KEY.get(card.mood)
+        return f"{card.day.month}월 {card.day.day}일 · {mood.label if mood else ''}"
+
     def build_tab(index: int) -> ft.Control:
         if index == TAB_HOME:
             all_brews = brews.list(limit=home_limit + 1, kind=home_kind)
@@ -582,6 +675,13 @@ def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None
                 on_repeat=repeat_brew,
                 rated_count=brews.rated_count(),
                 on_taste=lambda: open_tab(TAB_ME),
+                hero=hero_banner(
+                    "home",
+                    "오늘은 어떤 한 잔인가요?",
+                    "잘 맞았던 레시피도, 작은 실험도 차곡차곡.",
+                    eyebrow="MY DAILY BREW",
+                ),
+                side_extra=news_section(),
             )
         if index in TAB_KINDS:
             kind = TAB_KINDS[index]
@@ -593,6 +693,33 @@ def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None
                 on_add=lambda: open_bean_form(kind),
                 on_open=lambda b: open_bean_form(kind, b),
                 top=[speech_bubble(beans_greeting(kind, len(items)))],
+                hero=hero_banner(
+                    "coffee" if kind is BeanKind.COFFEE else "tea",
+                    "커피" if kind is BeanKind.COFFEE else "차",
+                    "내가 가진 원두" if kind is BeanKind.COFFEE else "내가 가진 찻잎과 티백",
+                    eyebrow="MY BEANS" if kind is BeanKind.COFFEE else "MY TEA",
+                ),
+            )
+        if index == TAB_SHOP:
+            return shop_view(
+                ShopDeps(
+                    is_notified=lambda key: settings.get_flag(NOTIFY_PREFIX + key) is True,
+                    set_notified=lambda key, on: settings.set_flag(NOTIFY_PREFIX + key, on),
+                    is_bookmarked=lambda key: bookmarks.has("product", key),
+                    on_bookmark=toggle_product,
+                    notify=notify,
+                )
+            )
+        if index == TAB_BOOKMARK:
+            return bookmark_view(
+                bookmarks.list(),
+                words.saved(),
+                word_label,
+                BookmarkDeps(
+                    on_open=open_bookmark,
+                    on_remove=remove_bookmark,
+                    on_open_word=lambda c: open_word_card(c, TAB_BOOKMARK),
+                ),
             )
         return me_view(
             version,
@@ -639,7 +766,7 @@ def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None
         on_change=lambda e: open_tab(e.control.selected_index),
     )
     page.navigation_bar = nav
-    page.add(ft.SafeArea(expand=True, content=scroller))
+    page.add(ft.SafeArea(expand=True, content=page_background(scroller)))
     attached["scroller"] = True
     open_tab(TAB_HOME)
     page.run_task(watch_idle)

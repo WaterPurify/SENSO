@@ -1,7 +1,7 @@
 """④ 기록 상세: 원했던 맛 / 레시피 / 실제로 느낀 맛 / 연결된 기록."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import flet as ft
 
@@ -28,6 +28,7 @@ class DetailDeps:
     on_deleted: Callable[[], None]
     on_recommend: Callable[[Brew], None] | None = None
     on_compare: Callable[[int, int], None] | None = None  # (이전 기록 id, 이 기록 id)
+    header_actions: list[ft.Control] = field(default_factory=list)  # 예: 책갈피 단추
 
 
 def info_row(label: str, value: str) -> ft.Control:
@@ -245,6 +246,7 @@ def brew_detail_view(brew: Brew, deps: DetailDeps) -> ft.Control:
                             ),
                         ],
                     ),
+                    *deps.header_actions,
                 ]
             ),
             ft.Row(wrap=True, spacing=6, controls=tags),
