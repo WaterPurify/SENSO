@@ -114,10 +114,11 @@ def test_change_password(tmp_path):
         store.change_password(user, PASSWORD, "password1234")  # 약한 새 비밀번호
     with pytest.raises(AuthError):
         store.change_password(user, PASSWORD, PASSWORD)  # 같은 비밀번호
-    store.change_password(user, PASSWORD, new)
+    updated = store.change_password(user, PASSWORD, new)
     with pytest.raises(AuthError):
         store.login("alice", PASSWORD)
-    assert store.login("alice", new) == user
+    assert store.login("alice", new) == updated
+    assert updated.session_version == user.session_version + 1
 
 
 def test_delete_account_removes_everything(tmp_path):

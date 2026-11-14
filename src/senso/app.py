@@ -16,18 +16,19 @@ from senso.characters.lines import (
 )
 from senso.db.bean_repo import BeanRepository
 from senso.db.brew_repo import BrewRepository
-from senso.db.database import open_database, schema_version
+from senso.db.database import schema_version
 from senso.db.quiz_repo import QuizRepository
 from senso.db.recommendation_repo import RecommendationRepository
 from senso.db.settings_repo import WORD_ENABLED, SettingsRepository
 from senso.db.word_repo import WordCard, WordRepository
 from senso.domain.bean import Bean, BeanKind
 from senso.domain.brew import Brew, BrewDraft
-from senso.export import export_zip
+from senso.export import ExportError, export_account
 from senso.photos import MAX_INPUT_BYTES, PhotoError, load_photo
 from senso.recommend.apply import draft_from_brew, draft_from_recommendation
 from senso.recommend.engine import Recommendation, recommend
 from senso.samples import add_samples, remove_samples
+from senso.sessions import DataSession
 from senso.taste.dna import compute as compute_dna
 from senso.taste.quiz import QuizResult
 from senso.ui import theme
@@ -84,13 +85,12 @@ def main(page: ft.Page, notice: str | None = None) -> None:
 def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None) -> None:
     store = store or AuthStore(config.data_dir())
     client = getattr(page, "client_ip", None)
-    directory = user.directory(config.data_dir())
-    # 로그인 성공 후에만 해당 계정의 저장소를 연다.
-    conn = open_database(directory / config.DB_FILENAME)
+    conn = DataSession(store, user)
+    directory = store.root / "users" / user.id
 
     # on_disconnect는 새로고침 등으로 잠깐 끊겨도 불리고 세션은 다시 이어지므로,
     # 세션이 완전히 끝날 때(on_close)만 연결을 닫는다.
-    session = {"alive": True, "active_at": time.monotonic()}
+    session = {"alive": True, "active_at": time.monotonic(), "changing_password": False}
 
     def close_session(_) -> None:
         if not session["alive"]:
@@ -104,13 +104,26 @@ def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None
         page.on_keyboard_event = None
         main(page, notice)
 
+    conn.on_revoke = lambda: logout(notice="계정 상태가 변경됐어요. 다시 로그인해 주세요.")
+
     # ---- 자동 로그아웃 ------------------------------------------------------
     def touch(_=None) -> None:
-        session["active_at"] = time.monotonic()
+        with conn.access():
+            session["active_at"] = time.monotonic()
 
     async def watch_idle() -> None:
         while session["alive"]:
             await asyncio.sleep(IDLE_CHECK_SECONDS)
+            if not session["alive"]:
+                break
+            if session["changing_password"]:
+                continue
+            try:
+                store.require_session(conn.user)
+            except AuthError:
+                conn.on_revoke()
+                page.update()
+                break
             idle = time.monotonic() - session["active_at"]
             if session["alive"] and idle >= IDLE_MINUTES * 60:
                 logout(notice=f"{IDLE_MINUTES}분 동안 사용하지 않아 안전을 위해 로그아웃했어요.")
@@ -158,6 +171,9 @@ def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None
     async def save_bytes(data: bytes, file_name: str, extension: str, what: str) -> None:
         """웹·폰에서는 내용을 넘겨 내려받게 하고, PC 창에서는 고른 위치에 직접 쓴다."""
         try:
+            store.require_session(conn.user)
+            if not session["alive"]:
+                return
             path = await picker.save_file(
                 dialog_title=f"{what} 저장",
                 file_name=file_name,
@@ -182,31 +198,51 @@ def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None
         page.pop_dialog()
 
     async def change_password(current: str, new: str) -> str | None:
+        session["changing_password"] = True
         try:
-            await asyncio.to_thread(store.change_password, user, current, new, client)
+            renewed = await asyncio.to_thread(
+                store.change_password, conn.user, current, new, client
+            )
+            conn.user = renewed
+            conn.revoke_others()
         except AuthError as e:
             return "지금 비밀번호가 맞지 않아요." if str(e) == WRONG_PASSWORD else str(e)
+        finally:
+            session["changing_password"] = False
+        if not session["alive"]:
+            return None
         page.pop_dialog()
-        notify("비밀번호를 바꿨어요.")
+        notify("비밀번호를 바꿨어요. 다른 기기에서는 다시 로그인해야 해요.")
         return None
 
     async def export_data() -> None:
-        data = await asyncio.to_thread(export_zip, conn, photo_dir, config.now())
-        stamp = config.now().strftime("%Y%m%d")
-        await save_bytes(data, f"SENSO_내데이터_{stamp}.zip", "zip", "내 데이터")
+        try:
+            data = await asyncio.to_thread(export_account, store, conn.user, config.now())
+            store.require_session(conn.user)
+            if session["alive"]:
+                stamp = config.now().strftime("%Y%m%d")
+                await save_bytes(data, f"SENSO_내데이터_{stamp}.zip", "zip", "내 데이터")
+        except (ExportError, AuthError) as exc:
+            notify(str(exc))
+        except Exception:
+            notify("내보내지 못했어요. 잠시 뒤 다시 시도해 주세요.")
 
     async def delete_account(password: str) -> str | None:
         try:
-            # 먼저 비밀번호를 확인하고, 그다음에 이 계정의 DB 연결을 닫고 지운다
-            await asyncio.to_thread(store.login, user.username, password, client)
+            await asyncio.to_thread(store.begin_delete, conn.user, password, client)
         except AuthError as e:
             return "비밀번호가 맞지 않아요." if str(e) == WRONG_PASSWORD else str(e)
         page.pop_dialog()
+        conn.revoke_others()
         close_session(None)
         try:
-            await asyncio.to_thread(store.delete_account, user, password, client)
+            await asyncio.to_thread(store.finish_delete, user.id)
         except Exception:
-            logout(notice="계정을 지우지 못했어요. 다시 로그인해 주세요.")
+            logout(
+                notice="계정 접근을 차단했지만 일부 파일을 지우지 못했어요. "
+                "관리자에게 삭제 재시도를 요청해 주세요."
+            )
+            page.update()
             return None
         logout(notice="계정과 모든 기록을 지웠어요. 그동안 함께해 줘서 고마워요.")
         page.update()
@@ -301,6 +337,7 @@ def authenticated_main(page: ft.Page, user: User, store: AuthStore | None = None
         tab = TAB_COFFEE if kind is BeanKind.COFFEE else TAB_TEA
         deps = FormDeps(
             repo=beans,
+            access=conn.access,
             photo_dir=photo_dir,
             pick_image=pick_image,
             notify=notify,

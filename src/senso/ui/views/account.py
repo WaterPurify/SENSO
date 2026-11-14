@@ -19,7 +19,24 @@ def account_section(
     on_delete: Callable[[], None],
 ) -> ft.Control:
     async def export(_: ft.Event) -> None:
-        await on_export()
+        if export_button.disabled:
+            return
+        export_button.disabled = True
+        export_button.content = "내보내는 중…"
+        export_button.update()
+        try:
+            await on_export()
+        finally:
+            export_button.disabled = False
+            export_button.content = "내 데이터 내보내기 (ZIP)"
+            try:
+                export_button.update()
+            except RuntimeError:
+                pass  # The user may have navigated away while the worker ran.
+
+    export_button = ft.OutlinedButton(
+        "내 데이터 내보내기 (ZIP)", icon=ft.Icons.DOWNLOAD, on_click=export
+    )
 
     return section(
         "계정",
@@ -28,7 +45,7 @@ def account_section(
             ft.OutlinedButton(
                 "비밀번호 바꾸기", icon=ft.Icons.LOCK_RESET, on_click=lambda _: on_password()
             ),
-            ft.OutlinedButton("내 데이터 내보내기 (ZIP)", icon=ft.Icons.DOWNLOAD, on_click=export),
+            export_button,
             ft.Text(
                 "기록·말씀 카드·설정(JSON)과 사진을 한 파일로 받아요.",
                 size=12,
@@ -64,15 +81,19 @@ def _dialog(
             return
         state["busy"] = True
         ok.disabled = True
+        cancel.disabled = True
         message.value = "확인 중이에요."
         dialog.update()
         try:
             error = await run()
+        except Exception:
+            error = "처리하지 못했어요. 잠시 뒤 다시 시도해 주세요."
         finally:
             state["busy"] = False
         if error:
             message.value = error
             ok.disabled = False
+            cancel.disabled = False
             dialog.update()
 
     ok = ft.FilledButton(
@@ -80,11 +101,12 @@ def _dialog(
         style=ft.ButtonStyle(bgcolor=ft.Colors.RED_700) if danger else None,
         on_click=submit,
     )
+    cancel = ft.TextButton("취소", on_click=lambda _: on_close())
     dialog = ft.AlertDialog(
         modal=True,
         title=ft.Text(title),
         content=ft.Column(tight=True, width=340, controls=[*fields, message]),
-        actions=[ft.TextButton("취소", on_click=lambda _: on_close()), ok],
+        actions=[cancel, ok],
     )
     return dialog
 

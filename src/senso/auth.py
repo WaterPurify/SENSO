@@ -47,6 +47,7 @@ class AuthError(ValueError):
 class User:
     id: str
     username: str
+    session_version: int = 0
 
     def directory(self, root: Path) -> Path:
         # DB 값이라도 경로로 쓰기 전에 검증한다.
@@ -87,6 +88,11 @@ class AuthStore:
                     client TEXT NOT NULL, at REAL NOT NULL
                 );
             """)
+            conn.execute("BEGIN IMMEDIATE")
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+            for name in ("session_version", "deleting"):
+                if name not in columns:
+                    conn.execute(f"ALTER TABLE users ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0")
         self.path.chmod(0o600)
 
     @contextmanager
@@ -117,7 +123,10 @@ class AuthStore:
         user = User(uuid.uuid4().hex, name)
         try:
             with self.connection() as conn:
-                conn.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (user.id, name, salt, digest))
+                conn.execute(
+                    "INSERT INTO users (id, username, salt, password_hash) VALUES (?, ?, ?, ?)",
+                    (user.id, name, salt, digest),
+                )
                 conn.execute("INSERT INTO signup_events VALUES (?, ?)", (key, now))
         except sqlite3.IntegrityError:
             raise AuthError("이미 사용 중인 아이디예요.") from None
@@ -169,9 +178,16 @@ class AuthStore:
             ).fetchone()
             if attempt and attempt["blocked_until"] > now:
                 raise AuthError("로그인 시도가 많아요. 5분 뒤 다시 시도해 주세요.")
-            if valid and row:
+            latest = conn.execute("SELECT * FROM users WHERE username = ?", (name,)).fetchone()
+            if (
+                valid
+                and row
+                and latest
+                and not latest["deleting"]
+                and hmac.compare_digest(row["password_hash"], latest["password_hash"])
+            ):
                 conn.execute("DELETE FROM login_attempts WHERE username = ?", (name,))
-                return User(row["id"], row["username"])
+                return User(latest["id"], latest["username"], latest["session_version"])
             failures = (
                 attempt["failures"] if attempt and attempt["updated_at"] > now - LOCK_SECONDS else 0
             ) + 1
@@ -188,18 +204,64 @@ class AuthStore:
 
     # ---- 로그인한 사용자의 계정 관리 ---------------------------------------------
 
+    def require_session(self, user: User) -> None:
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT session_version, deleting FROM users WHERE id = ?", (user.id,)
+            ).fetchone()
+        if not row or row["deleting"] or row["session_version"] != user.session_version:
+            raise AuthError("로그인이 만료됐어요. 다시 로그인해 주세요.")
+
     def change_password(self, user: User, current: str, new: str, client: str | None = None):
-        """지금 비밀번호를 확인한 뒤 바꾼다. 확인 실패는 로그인 실패와 같이 센다."""
-        self.login(user.username, current, client)
+        self.require_session(user)
+        verified = self.login(user.username, current, client)
+        if verified != user:
+            raise AuthError("로그인이 만료됐어요. 다시 로그인해 주세요.")
         check_new_password(new, user.username)
         if hmac.compare_digest(current.encode(), new.encode()):
             raise AuthError("지금 비밀번호와 다른 비밀번호를 입력해 주세요.")
         salt = secrets.token_bytes(32)
+        digest = _hash(new, salt)
         with self.connection() as conn:
-            conn.execute(
-                "UPDATE users SET salt = ?, password_hash = ? WHERE id = ?",
-                (salt, _hash(new, salt), user.id),
-            )
+            changed = conn.execute(
+                "UPDATE users SET salt = ?, password_hash = ?, "
+                "session_version = session_version + 1 "
+                "WHERE id = ? AND session_version = ? AND deleting = 0",
+                (salt, digest, user.id, user.session_version),
+            ).rowcount
+            if not changed:
+                raise AuthError("로그인이 만료됐어요. 다시 로그인해 주세요.")
+        return User(user.id, user.username, user.session_version + 1)
+
+    def begin_delete(self, user: User, password: str, client: str | None = None) -> None:
+        self.require_session(user)
+        if self.login(user.username, password, client) != user:
+            raise AuthError("로그인이 만료됐어요. 다시 로그인해 주세요.")
+        with self.connection() as conn:
+            changed = conn.execute(
+                "UPDATE users SET deleting = 1, session_version = session_version + 1 "
+                "WHERE id = ? AND session_version = ? AND deleting = 0",
+                (user.id, user.session_version),
+            ).rowcount
+            if not changed:
+                raise AuthError("로그인이 만료됐어요. 다시 로그인해 주세요.")
+
+    def finish_delete(self, user_id: str) -> None:
+        """관리자도 삭제 실패 후 재시도 가능. 삭제 대기 계정만 처리한다."""
+        if uuid.UUID(user_id).hex != user_id:
+            raise ValueError("잘못된 사용자 ID")
+        with self.connection() as conn:
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+            if not row or not row["deleting"]:
+                raise AuthError("삭제 대기 계정이 아니에요.")
+        directory = self.root / "users" / user_id
+        if directory.is_symlink():
+            raise ValueError("계정 폴더가 심볼릭 링크입니다.")
+        if directory.exists():
+            shutil.rmtree(directory)  # 실패 시 tombstone을 남겨 접근을 계속 차단한다.
+        with self.connection() as conn:
+            conn.execute("DELETE FROM users WHERE id = ? AND deleting = 1", (user_id,))
+            conn.execute("DELETE FROM login_attempts WHERE username = ?", (row["username"],))
 
     def delete_account(
         self,
@@ -208,18 +270,10 @@ class AuthStore:
         client: str | None = None,
         before_delete: Callable[[], None] | None = None,
     ) -> None:
-        """비밀번호를 확인한 뒤 계정과 그 계정의 기록·사진을 모두 지운다. 되돌릴 수 없다.
-
-        before_delete: 확인이 끝난 뒤, 지우기 직전에 부른다 (열린 DB 연결 닫기 등).
-        """
-        self.login(user.username, password, client)
+        self.begin_delete(user, password, client)
         if before_delete:
             before_delete()
-        directory = user.directory(self.root)  # UUID 검증을 거친 경로
-        with self.connection() as conn:
-            conn.execute("DELETE FROM users WHERE id = ?", (user.id,))
-            conn.execute("DELETE FROM login_attempts WHERE username = ?", (user.username,))
-        shutil.rmtree(directory, ignore_errors=True)
+        self.finish_delete(user.id)
 
 
 def check_new_password(password: str, username: str | None = None) -> None:

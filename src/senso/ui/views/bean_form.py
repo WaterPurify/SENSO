@@ -1,6 +1,7 @@
 """원두·차 등록과 수정 화면."""
 
 from collections.abc import Awaitable, Callable
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,6 +38,7 @@ class FormDeps:
     notify: Callable[[str], None]
     confirm: Callable[[str, str, str, Callable[[], None]], None]
     close: Callable[[], None]  # 목록으로 돌아가기
+    access: Callable = nullcontext
 
 
 class BeanForm(ft.Column):
@@ -219,7 +221,7 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
         choice.error_text = errors.get(choice_field)
 
     # ---- 저장·삭제·취소 ---------------------------------------------------
-    def on_save(_: ft.Event) -> None:
+    def save(_: ft.Event) -> None:
         try:
             draft = validate_bean(
                 kind,
@@ -257,6 +259,10 @@ def bean_form_view(kind: BeanKind, bean: Bean | None, deps: FormDeps) -> ft.Cont
         discard_unsaved_photo()
         deps.notify(f"{josa(quote(draft.name), '을')} 저장했어요.")
         deps.close()
+
+    def on_save(event: ft.Event) -> None:
+        with deps.access():
+            save(event)
 
     def on_cancel(_: ft.Event) -> None:
         discard_unsaved_photo()
