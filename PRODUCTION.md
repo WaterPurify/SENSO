@@ -41,20 +41,9 @@ docker compose -f compose.prod.yaml down
 
 ## 백업과 복원
 
-백업은 데이터 볼륨을 이 폴더의 `backup/`에 tar 파일로 저장합니다.
+운영 데이터는 앱을 잠시 중지한 뒤 age로 암호화해서 백업합니다. 백업 결과를 다시 복호화하여 파일 해시와 무결성을 검증합니다. 복원은 **새 빈 볼륨에만** 수행하며 운영 데이터에 자동으로 덮어쓰지 않습니다.
 
-```bash
-docker run --rm -v senso-prod_data:/data:ro -v "%cd%/backup:/backup" python:3.12-slim tar czf /backup/senso-data.tgz -C /data .
-```
-
-- PowerShell에서는 `%cd%` 대신 `${PWD}`를 씁니다.
-- 백업 파일에는 모든 계정의 기록과 사진이 들어 있습니다. 안전한 곳에 두고, 저장소(GitHub)에 올리지 마세요.
-
-복원은 앱을 끈 상태에서 합니다. 볼륨의 기존 내용을 덮어씁니다.
-
-```bash
-docker run --rm -v senso-prod_data:/data -v "%cd%/backup:/backup" python:3.12-slim sh -c "tar xzf /backup/senso-data.tgz -C /data && chown -R 10001:10001 /data"
-```
+PowerShell 명령, 키 보관, 복원 후 시험 접속·운영 전환 및 삭제 실패 재시도는 [ops/README.md](ops/README.md)를 따르세요. 사용자 ZIP 내보내기는 운영 백업과 별개입니다.
 
 ## 의존성·베이스 이미지 갱신
 

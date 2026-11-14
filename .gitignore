@@ -13,3 +13,10 @@ backup/
 # 비밀 값 (Tailscale 인증 키 등). 절대 올리지 않음
 .env
 .env.*
+
+# Operator encryption keys and encrypted archives
+*.age
+*.agekey
+backup-keys/
+compose.restore.yaml
+node_modules/

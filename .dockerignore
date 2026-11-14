@@ -14,3 +14,9 @@ build/
 **/*.db-shm
 .env
 .env.*
+
+backup/
+backup-keys/
+**/*.age
+**/*.agekey
+node_modules/
